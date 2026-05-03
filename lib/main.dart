@@ -5,6 +5,7 @@ import 'quiz_screen.dart';
 import 'dictionary_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'database_service.dart';
+import 'detector_service.dart';
 
 List<CameraDescription> cameras = [];
 
@@ -32,12 +33,13 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   late CameraController _controller;
   bool _isInitialized = false;
-  String _detectedWord = 'bottle';
+  String _detectedWord = '';
   String _definition = '';
   String _phonetic = '';
   String _example = '';
   bool _showOverlay = false;
   bool _isLoadingWord = false;
+  bool _isDetecting = false;
   int _currentIndex = 0;
   final FlutterTts _tts = FlutterTts();
 
@@ -45,6 +47,7 @@ class _CameraScreenState extends State<CameraScreen> {
   void initState() {
     super.initState();
     _initCamera();
+    DetectorService.loadModel();
   }
 
   Future<void> _initCamera() async {
@@ -79,9 +82,37 @@ class _CameraScreenState extends State<CameraScreen> {
     await _tts.speak(word);
   }
 
+  Future<void> _startDetection() async {
+    if (!_controller.value.isInitialized || _isDetecting) return;
+
+    setState(() => _isDetecting = true);
+
+    try {
+      final image = await _controller.takePicture();
+      final result = await DetectorService.detectObject(image.path);
+
+      if (result != null && result.isNotEmpty) {
+        _lookupWord(result);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No object detected. Try again!'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Detection error: $e');
+    }
+
+    setState(() => _isDetecting = false);
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    DetectorService.dispose();
     super.dispose();
   }
 
@@ -103,27 +134,41 @@ class _CameraScreenState extends State<CameraScreen> {
                   right: 0,
                   child: Center(
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         'Point camera at an object',
-                        style: TextStyle(color: Colors.white, fontSize: 14),
+                        style:
+                            TextStyle(color: Colors.white, fontSize: 14),
                       ),
                     ),
                   ),
                 ),
 
-                // Search button
+                // Detect button
                 Positioned(
                   top: 100,
                   right: 16,
                   child: FloatingActionButton.small(
-                    onPressed: () => _lookupWord('bottle'),
-                    backgroundColor: Colors.blue,
-                    child: Icon(Icons.search, color: Colors.white),
+                    onPressed:
+                        _isDetecting ? null : _startDetection,
+                    backgroundColor:
+                        _isDetecting ? Colors.grey : Colors.blue,
+                    child: _isDetecting
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Icon(Icons.camera_alt,
+                            color: Colors.white),
                   ),
                 ),
 
@@ -139,13 +184,16 @@ class _CameraScreenState extends State<CameraScreen> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
-                          BoxShadow(color: Colors.black26, blurRadius: 10),
+                          BoxShadow(
+                              color: Colors.black26, blurRadius: 10),
                         ],
                       ),
                       child: _isLoadingWord
-                          ? Center(child: CircularProgressIndicator())
+                          ? Center(
+                              child: CircularProgressIndicator())
                           : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   mainAxisAlignment:
@@ -162,7 +210,8 @@ class _CameraScreenState extends State<CameraScreen> {
                                     IconButton(
                                       icon: Icon(Icons.close),
                                       onPressed: () {
-                                        setState(() => _showOverlay = false);
+                                        setState(() =>
+                                            _showOverlay = false);
                                       },
                                     ),
                                   ],
@@ -185,7 +234,8 @@ class _CameraScreenState extends State<CameraScreen> {
                                 ),
                                 if (_example.isNotEmpty)
                                   Padding(
-                                    padding: EdgeInsets.only(top: 8),
+                                    padding:
+                                        EdgeInsets.only(top: 8),
                                     child: Text(
                                       '"$_example"',
                                       style: TextStyle(
@@ -196,50 +246,55 @@ class _CameraScreenState extends State<CameraScreen> {
                                     ),
                                   ),
                                 SizedBox(height: 12),
-                                ElevatedButton(
-                                  onPressed: () => _lookupWord('bottle'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: Text('Test API: bottle'),
-                                ),
-                                SizedBox(height: 8),
                                 Row(
                                   children: [
                                     ElevatedButton.icon(
-                                      onPressed: () => _speak(_detectedWord),
-                                      icon: Icon(Icons.volume_up, size: 18),
+                                      onPressed: () =>
+                                          _speak(_detectedWord),
+                                      icon: Icon(Icons.volume_up,
+                                          size: 18),
                                       label: Text('Pronounce'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue,
-                                        foregroundColor: Colors.white,
+                                      style:
+                                          ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            Colors.blue,
+                                        foregroundColor:
+                                            Colors.white,
                                       ),
                                     ),
                                     SizedBox(width: 10),
                                     ElevatedButton.icon(
                                       onPressed: () async {
-                                        await DatabaseService.saveWord({
+                                        await DatabaseService
+                                            .saveWord({
                                           'word': _detectedWord,
                                           'phonetic': _phonetic,
-                                          'definition': _definition,
+                                          'definition':
+                                              _definition,
                                           'example': _example,
                                         });
-                                        ScaffoldMessenger.of(context)
+                                        ScaffoldMessenger.of(
+                                                context)
                                             .showSnackBar(
                                           SnackBar(
                                             content: Text(
                                                 '"$_detectedWord" saved!'),
-                                            backgroundColor: Colors.green,
-                                            duration: Duration(seconds: 2),
+                                            backgroundColor:
+                                                Colors.green,
+                                            duration: Duration(
+                                                seconds: 2),
                                           ),
                                         );
                                       },
-                                      icon: Icon(Icons.bookmark, size: 18),
+                                      icon: Icon(Icons.bookmark,
+                                          size: 18),
                                       label: Text('Save'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
+                                      style:
+                                          ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            Colors.green,
+                                        foregroundColor:
+                                            Colors.white,
                                       ),
                                     ),
                                   ],
@@ -258,10 +313,12 @@ class _CameraScreenState extends State<CameraScreen> {
                     color: Colors.black87,
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      mainAxisAlignment:
+                          MainAxisAlignment.spaceAround,
                       children: [
                         GestureDetector(
-                          onTap: () => setState(() => _currentIndex = 0),
+                          onTap: () =>
+                              setState(() => _currentIndex = 0),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -284,7 +341,8 @@ class _CameraScreenState extends State<CameraScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (context) => SavedScreen()),
+                                  builder: (context) =>
+                                      SavedScreen()),
                             );
                           },
                           child: Column(
@@ -309,7 +367,8 @@ class _CameraScreenState extends State<CameraScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (context) => QuizScreen()),
+                                  builder: (context) =>
+                                      QuizScreen()),
                             );
                           },
                           child: Column(
@@ -336,7 +395,8 @@ class _CameraScreenState extends State<CameraScreen> {
               ],
             )
           : Center(
-              child: CircularProgressIndicator(color: Colors.white),
+              child:
+                  CircularProgressIndicator(color: Colors.white),
             ),
     );
   }
