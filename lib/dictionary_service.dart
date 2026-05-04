@@ -12,7 +12,7 @@ class DictionaryService {
         final List data = json.decode(response.body);
         final entry = data[0];
 
-        // Get phonetic
+        // Phonetic
         String phonetic = '';
         if (entry['phonetic'] != null) {
           phonetic = entry['phonetic'];
@@ -21,29 +21,27 @@ class DictionaryService {
           phonetic = entry['phonetics'][0]['text'] ?? '';
         }
 
-        // Get definition
+        // Part of speech + definition + example
+        String partOfSpeech = 'Noun';
         String definition = '';
-        if (entry['meanings'] != null && entry['meanings'].isNotEmpty) {
-          final meanings = entry['meanings'][0];
-          if (meanings['definitions'] != null &&
-              meanings['definitions'].isNotEmpty) {
-            definition = meanings['definitions'][0]['definition'] ?? '';
-          }
-        }
-
-        // Get example sentence
         String example = '';
+
         if (entry['meanings'] != null && entry['meanings'].isNotEmpty) {
-          final meanings = entry['meanings'][0];
-          if (meanings['definitions'] != null &&
-              meanings['definitions'].isNotEmpty) {
-            example = meanings['definitions'][0]['example'] ?? '';
+          final meaning = entry['meanings'][0];
+          partOfSpeech = _capitalize(meaning['partOfSpeech'] ?? 'noun');
+
+          if (meaning['definitions'] != null &&
+              meaning['definitions'].isNotEmpty) {
+            final def = meaning['definitions'][0];
+            definition = def['definition'] ?? '';
+            example = def['example'] ?? '';
           }
         }
 
         return {
           'word': word,
           'phonetic': phonetic,
+          'partOfSpeech': partOfSpeech,
           'definition': definition,
           'example': example,
         };
@@ -51,6 +49,7 @@ class DictionaryService {
         return {
           'word': word,
           'phonetic': '',
+          'partOfSpeech': 'Noun',
           'definition': 'Definition not found.',
           'example': '',
         };
@@ -59,9 +58,13 @@ class DictionaryService {
       return {
         'word': word,
         'phonetic': '',
+        'partOfSpeech': 'Noun',
         'definition': 'Could not load definition.',
         'example': '',
       };
     }
   }
+
+  static String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
