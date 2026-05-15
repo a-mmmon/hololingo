@@ -3,6 +3,8 @@ import 'database_service.dart';
 import 'app_theme.dart';
 
 class SavedScreen extends StatefulWidget {
+  const SavedScreen({super.key});
+
   @override
   _SavedScreenState createState() => _SavedScreenState();
 }
@@ -137,7 +139,7 @@ class _SavedScreenState extends State<SavedScreen> {
                                 onDelete: () =>
                                     _deleteWord(word['id']),
                               );
-                            }).toList(),
+                            }),
                             if (_needsReview().isNotEmpty) ...[
                               SizedBox(height: 20),
                               _SectionHeader('Needs review'),
