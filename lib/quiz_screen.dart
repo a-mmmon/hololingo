@@ -3,6 +3,8 @@ import 'app_theme.dart';
 import 'database_service.dart';
 
 class QuizScreen extends StatefulWidget {
+  const QuizScreen({super.key});
+
   @override
   _QuizScreenState createState() => _QuizScreenState();
 }
@@ -364,7 +366,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 itemCount: (question['options'] as List).length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
                 itemBuilder: (_, index) {
                   final options = question['options'] as List;
                   final option = options[index] as String;
@@ -418,7 +420,7 @@ class _QuizScreenState extends State<QuizScreen> {
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600)),
                           ),
-                          if (trailingIcon != null) trailingIcon,
+                          ?trailingIcon,
                         ],
                       ),
                     ),

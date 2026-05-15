@@ -24,11 +24,10 @@ class DatabaseService {
     return _db!;
   }
 
-  // Accepts Map<String, dynamic> so callers don't need to cast
   static Future<void> saveWord(Map<String, dynamic> wordData) async {
     final db = await getDatabase();
-    // Convert all values to String to match the TEXT columns
-    final row = wordData.map((k, v) => MapEntry(k, v?.toString() ?? ''));
+    final row =
+        wordData.map((k, v) => MapEntry(k, v?.toString() ?? ''));
     await db.insert(
       'saved_words',
       row,
@@ -44,5 +43,20 @@ class DatabaseService {
   static Future<void> deleteWord(int id) async {
     final db = await getDatabase();
     await db.delete('saved_words', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<String> exportToCsv() async {
+    final words = await getSavedWords();
+    String csv = 'Word,Phonetic,Definition,Example\n';
+    for (final word in words) {
+      final w = word['word'] ?? '';
+      final p = word['phonetic'] ?? '';
+      final d =
+          (word['definition'] ?? '').toString().replaceAll(',', ';');
+      final e =
+          (word['example'] ?? '').toString().replaceAll(',', ';');
+      csv += '"$w","$p","$d","$e"\n';
+    }
+    return csv;
   }
 }

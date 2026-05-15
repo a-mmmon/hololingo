@@ -5,11 +5,15 @@ import 'saved_screen.dart';
 import 'quiz_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
+import 'vocal_screen.dart';
 import 'dictionary_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'database_service.dart';
 import 'detector_service.dart';
 import 'app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'edit_profile_screen.dart';
+import 'dart:io';
 
 List<CameraDescription> cameras = [];
 
@@ -18,12 +22,21 @@ Future<void> main() async {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
   );
-  cameras = await availableCameras();
+
+  // FIX 1: Wrap availableCameras() in try/catch — it can throw if
+  // permission is denied, hanging or crashing the app before UI shows.
+  try {
+    cameras = await availableCameras();
+  } catch (e) {
+    debugPrint('Camera init error: $e');
+    cameras = [];
+  }
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -38,15 +51,15 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ── Tab Switcher — inherited widget so any child can switch tabs ──────────────
+// ── Tab Switcher ──────────────────────────────────────────────────────────────
 class TabSwitcher extends InheritedWidget {
   final void Function(int) switchTab;
 
   const TabSwitcher({
-    Key? key,
+    super.key,
     required this.switchTab,
-    required Widget child,
-  }) : super(key: key, child: child);
+    required super.child,
+  });
 
   static TabSwitcher? of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<TabSwitcher>();
@@ -58,7 +71,7 @@ class TabSwitcher extends InheritedWidget {
 
 // ── App Shell ─────────────────────────────────────────────────────────────────
 class AppShell extends StatefulWidget {
-  const AppShell({Key? key}) : super(key: key);
+  const AppShell({super.key});
 
   @override
   _AppShellState createState() => _AppShellState();
@@ -69,21 +82,43 @@ class _AppShellState extends State<AppShell> {
 
   void _switchTab(int index) => setState(() => _currentIndex = index);
 
+  // FIX 2: Use PageView-style lazy loading instead of IndexedStack.
+  // IndexedStack builds ALL children immediately — including CameraTab —
+  // which triggers camera + ML Kit init before the user even taps Scan.
+  // This list only builds the tab when it's first visited.
+  final Map<int, Widget> _tabCache = {};
+
+  Widget _buildTab(int index) {
+    if (!_tabCache.containsKey(index)) {
+      _tabCache[index] = switch (index) {
+        0 => const HomeScreen(),
+        1 => const CameraTab(),
+        2 => SavedScreen(),
+        3 => const VocalScreen(),
+        4 => const ProfileScreen(),
+        _ => const SizedBox.shrink(),
+      };
+    }
+    return _tabCache[index]!;
+  }
+
   @override
   Widget build(BuildContext context) {
     return TabSwitcher(
       switchTab: _switchTab,
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        body: IndexedStack(
-          index: _currentIndex,
-          children: [
-            const HomeScreen(),
-            const CameraTab(),
-            QuizScreen(),
-            SavedScreen(),
-            const ProfileScreen(),
-          ],
+        // FIX 2 cont: Stack with Offstage keeps state but builds lazily
+        body: Stack(
+          children: List.generate(5, (i) {
+            return Offstage(
+              offstage: _currentIndex != i,
+              child: TickerMode(
+                enabled: _currentIndex == i,
+                child: _buildTab(i),
+              ),
+            );
+          }),
         ),
         bottomNavigationBar: AppBottomNav(
           currentIndex: _currentIndex,
@@ -96,15 +131,18 @@ class _AppShellState extends State<AppShell> {
 
 // ── Camera Tab ────────────────────────────────────────────────────────────────
 class CameraTab extends StatefulWidget {
-  const CameraTab({Key? key}) : super(key: key);
+  const CameraTab({super.key});
 
   @override
   _CameraTabState createState() => _CameraTabState();
 }
 
 class _CameraTabState extends State<CameraTab> {
-  late CameraController _controller;
+  CameraController? _controller;
   bool _isInitialized = false;
+  bool _hasCameraError = false;
+  String _cameraError = '';
+
   String _detectedWord = '';
   String _definition = '';
   String _phonetic = '';
@@ -119,14 +157,45 @@ class _CameraTabState extends State<CameraTab> {
   void initState() {
     super.initState();
     _initCamera();
+    // FIX 3: Don't await loadModel in initState — run it in background
     DetectorService.loadModel();
   }
 
   Future<void> _initCamera() async {
-    if (cameras.isEmpty) return;
-    _controller = CameraController(cameras[0], ResolutionPreset.high);
-    await _controller.initialize();
-    if (mounted) setState(() => _isInitialized = true);
+    if (cameras.isEmpty) {
+      setState(() {
+        _hasCameraError = true;
+        _cameraError = 'No cameras found. Please check camera permissions in Settings.';
+      });
+      return;
+    }
+
+    // FIX 4: Wrap entire camera init in try/catch with user-visible error
+    try {
+      final controller = CameraController(
+        cameras[0],
+        ResolutionPreset.high,
+        enableAudio: false, // saves resources, we don't need audio
+      );
+      await controller.initialize();
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+      setState(() {
+        _controller = controller;
+        _isInitialized = true;
+        _hasCameraError = false;
+      });
+    } catch (e) {
+      debugPrint('Camera init error: $e');
+      if (mounted) {
+        setState(() {
+          _hasCameraError = true;
+          _cameraError = 'Camera error: ${e.toString()}\n\nPlease allow camera access in Settings.';
+        });
+      }
+    }
   }
 
   Future<void> _lookupWord(String word) async {
@@ -136,6 +205,7 @@ class _CameraTabState extends State<CameraTab> {
       _detectedWord = word;
     });
     final result = await DictionaryService.getWordInfo(word);
+    if (!mounted) return;
     setState(() {
       _phonetic = result['phonetic'] ?? '';
       _definition = result['definition'] ?? '';
@@ -152,50 +222,95 @@ class _CameraTabState extends State<CameraTab> {
   }
 
   Future<void> _startDetection() async {
-    if (!_controller.value.isInitialized || _isDetecting) return;
+    final ctrl = _controller;
+    if (ctrl == null || !ctrl.value.isInitialized || _isDetecting) return;
     setState(() => _isDetecting = true);
     try {
-      final image = await _controller.takePicture();
+      final image = await ctrl.takePicture();
       final result = await DetectorService.detectObject(image.path);
+      if (!mounted) return;
       if (result != null && result.isNotEmpty) {
         _lookupWord(result);
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('No object detected. Try again!'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ));
-        }
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No object detected. Try again!'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ));
       }
     } catch (e) {
-      print('Detection error: $e');
+      debugPrint('Detection error: $e');
     }
-    setState(() => _isDetecting = false);
+    if (mounted) setState(() => _isDetecting = false);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     DetectorService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: _isInitialized ? _buildBody() : _buildLoading(),
-    );
+    if (_hasCameraError) return _buildError();
+    if (!_isInitialized) return _buildLoading();
+    return _buildBody();
   }
 
-  Widget _buildLoading() =>
-      const Center(child: CircularProgressIndicator(color: AppColors.cyan));
+  Widget _buildLoading() => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppColors.cyan),
+            SizedBox(height: 16),
+            Text('Starting camera...', style: TextStyle(color: Colors.white54)),
+          ],
+        ),
+      );
+
+  // FIX 5: Show a helpful error instead of a blank white screen
+  Widget _buildError() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.no_photography_outlined,
+                  color: Colors.white38, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                _cameraError,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white60, fontSize: 14, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _hasCameraError = false;
+                    _isInitialized = false;
+                  });
+                  _initCamera();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.cyan),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Text('Retry', style: TextStyle(color: AppColors.cyan)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildBody() {
     return Stack(
       children: [
-        SizedBox.expand(child: CameraPreview(_controller)),
+        SizedBox.expand(child: CameraPreview(_controller!)),
         Container(
           decoration: BoxDecoration(
             gradient: RadialGradient(
@@ -256,7 +371,10 @@ class _CameraTabState extends State<CameraTab> {
                   ));
                 }
               },
-              onQuiz: () => TabSwitcher.of(context)?.switchTab(2),
+              onQuiz: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => QuizScreen()),
+              ),
             ),
           ),
 
@@ -311,10 +429,10 @@ class _CornerPainter extends CustomPainter {
         Offset(size.width - m - len, m), Offset(size.width - m, m), paint);
     canvas.drawLine(
         Offset(size.width - m, m), Offset(size.width - m, m + len), paint);
-    canvas.drawLine(Offset(m, size.height - m - len),
-        Offset(m, size.height - m), paint);
-    canvas.drawLine(Offset(m, size.height - m),
-        Offset(m + len, size.height - m), paint);
+    canvas.drawLine(
+        Offset(m, size.height - m - len), Offset(m, size.height - m), paint);
+    canvas.drawLine(
+        Offset(m, size.height - m), Offset(m + len, size.height - m), paint);
     canvas.drawLine(Offset(size.width - m - len, size.height - m),
         Offset(size.width - m, size.height - m), paint);
     canvas.drawLine(Offset(size.width - m, size.height - m - len),
@@ -355,8 +473,8 @@ class _WordPanel extends StatelessWidget {
       child: isLoading
           ? const SizedBox(
               height: 120,
-              child: Center(
-                  child: CircularProgressIndicator(color: AppColors.cyan)))
+              child:
+                  Center(child: CircularProgressIndicator(color: AppColors.cyan)))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -405,9 +523,7 @@ class _WordPanel extends StatelessWidget {
                   ),
                 Text(definition,
                     style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        height: 1.5)),
+                        color: AppColors.textPrimary, fontSize: 15, height: 1.5)),
                 if (example.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 10),
