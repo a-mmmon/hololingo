@@ -1,55 +1,73 @@
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 
 class DetectorService {
-  static ObjectDetector? _detector;
+  static ImageLabeler? _labeler;
   static bool _isLoaded = false;
 
   static Future<void> loadModel() async {
     if (_isLoaded) return;
     try {
-      final options = ObjectDetectorOptions(
-        mode: DetectionMode.single,
-        classifyObjects: true,
-        multipleObjects: false,
-      );
-      _detector = ObjectDetector(options: options);
+      final options = ImageLabelerOptions(confidenceThreshold: 0.55);
+      _labeler = ImageLabeler(options: options);
       _isLoaded = true;
-      print('ML Kit detector loaded!');
+      debugPrint('ML Kit Image Labeler ready.');
     } catch (e) {
-      // FIX: Print full error so it shows in flutter logs
-      print('Error loading detector: $e');
+      debugPrint('Labeler init error: $e');
       _isLoaded = false;
     }
   }
 
   static Future<String?> detectObject(String imagePath) async {
-    // FIX: Auto-reload if somehow not loaded
-    if (!_isLoaded || _detector == null) {
+    if (!_isLoaded || _labeler == null) {
       await loadModel();
-      if (!_isLoaded || _detector == null) return null;
+      if (!_isLoaded || _labeler == null) return null;
     }
     try {
       final inputImage = InputImage.fromFilePath(imagePath);
-      final objects = await _detector!.processImage(inputImage);
-      if (objects.isEmpty) return null;
-      final best = objects.first;
-      if (best.labels.isEmpty) return null;
-      best.labels.sort((a, b) => b.confidence.compareTo(a.confidence));
-      final label = best.labels.first;
-      if (label.confidence > 0.5) {
-        return label.text.toLowerCase();
+      final labels = await _labeler!.processImage(inputImage);
+
+      if (labels.isEmpty) return null;
+
+      // Sort by confidence descending
+      labels.sort((a, b) => b.confidence.compareTo(a.confidence));
+
+      const skipLabels = {
+        'still life', 'art', 'fashion', 'gesture', 'event',
+        'photography', 'illustration', 'font', 'pattern',
+        'organism', 'macro photography', 'close-up', 'sky',
+        'light', 'darkness', 'black', 'white', 'color',
+        'rectangle', 'circle', 'line', 'shape', 'design',
+        'wood', 'metal', 'plastic', 'material', 'texture',
+        'indoor', 'outdoor', 'room', 'floor', 'wall', 'ceiling',
+      };
+
+      for (final label in labels) {
+        // v0.12.x uses .label not .text
+        final name = label.label.toLowerCase();
+        if (skipLabels.any((skip) => name.contains(skip))) continue;
+        if (name.length < 3) continue;
+        debugPrint('Detected: ${label.label} (${label.confidence.toStringAsFixed(2)})');
+        return _cleanLabel(name);
       }
-      return null;
+
+      // Fallback to top label
+      return _cleanLabel(labels.first.label.toLowerCase());
     } catch (e) {
-      print('Detection error: $e');
+      debugPrint('Detection error: $e');
       return null;
     }
   }
 
+  static String _cleanLabel(String label) {
+    final words = label.trim().split(' ');
+    if (words.length > 1) return words.last;
+    return label;
+  }
+
   static void dispose() {
-    _detector?.close();
-    _detector = null;
-    // FIX: Reset flag so loadModel() works again if CameraTab is recreated
+    _labeler?.close();
+    _labeler = null;
     _isLoaded = false;
   }
 }

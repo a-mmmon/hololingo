@@ -6,7 +6,7 @@ class DictionaryService {
     try {
       final response = await http.get(
         Uri.parse('https://api.dictionaryapi.dev/api/v2/entries/en/$word'),
-      );
+      ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final List data = json.decode(response.body);
@@ -17,7 +17,7 @@ class DictionaryService {
         if (entry['phonetic'] != null) {
           phonetic = entry['phonetic'];
         } else if (entry['phonetics'] != null &&
-            entry['phonetics'].isNotEmpty) {
+            (entry['phonetics'] as List).isNotEmpty) {
           phonetic = entry['phonetics'][0]['text'] ?? '';
         }
 
@@ -26,12 +26,13 @@ class DictionaryService {
         String definition = '';
         String example = '';
 
-        if (entry['meanings'] != null && entry['meanings'].isNotEmpty) {
+        if (entry['meanings'] != null &&
+            (entry['meanings'] as List).isNotEmpty) {
           final meaning = entry['meanings'][0];
           partOfSpeech = _capitalize(meaning['partOfSpeech'] ?? 'noun');
 
           if (meaning['definitions'] != null &&
-              meaning['definitions'].isNotEmpty) {
+              (meaning['definitions'] as List).isNotEmpty) {
             final def = meaning['definitions'][0];
             definition = def['definition'] ?? '';
             example = def['example'] ?? '';
