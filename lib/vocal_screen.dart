@@ -16,7 +16,6 @@ class _VocalScreenState extends State<VocalScreen> {
   bool _loading = true;
   int? _speakingIndex;
   double _speechRate = 0.5;
-  final bool _autoPlay = false;
 
   @override
   void initState() {
@@ -64,13 +63,13 @@ class _VocalScreenState extends State<VocalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = ThemeProvider.isDark(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.bg(dark),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
@@ -78,47 +77,39 @@ class _VocalScreenState extends State<VocalScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Pronunciation',
+                      Text('Pronunciation',
                           style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                              letterSpacing: -0.5)),
+                              fontSize: 28, fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary(dark), letterSpacing: -0.5)),
                       Text('Practice saying your words',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary)),
+                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary(dark))),
                     ],
                   ),
                   const Spacer(),
-                  // Reload button
                   GestureDetector(
                     onTap: () {
                       setState(() => _loading = true);
                       _loadWords();
                     },
                     child: Container(
-                      width: 40,
-                      height: 40,
+                      width: 40, height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: AppColors.card(dark),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.refresh_rounded,
-                          color: AppColors.cyan, size: 20),
+                      child: const Icon(Icons.refresh_rounded, color: AppColors.cyan, size: 20),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Speed slider
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
+                  color: AppColors.card(dark),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -126,42 +117,30 @@ class _VocalScreenState extends State<VocalScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.speed_rounded,
-                            color: AppColors.cyan, size: 18),
+                        const Icon(Icons.speed_rounded, color: AppColors.cyan, size: 18),
                         const SizedBox(width: 8),
                         Text('Speech speed',
                             style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
+                                color: AppColors.textPrimary(dark),
+                                fontSize: 14, fontWeight: FontWeight.w600)),
                         const Spacer(),
                         Text(
-                          _speechRate <= 0.3
-                              ? 'Slow'
-                              : _speechRate <= 0.5
-                                  ? 'Normal'
-                                  : 'Fast',
-                          style: TextStyle(
-                              color: AppColors.cyan,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700),
+                          _speechRate <= 0.3 ? 'Slow' : _speechRate <= 0.5 ? 'Normal' : 'Fast',
+                          style: const TextStyle(color: AppColors.cyan, fontSize: 13, fontWeight: FontWeight.w700),
                         ),
                       ],
                     ),
                     SliderTheme(
                       data: SliderThemeData(
                         activeTrackColor: AppColors.cyan,
-                        inactiveTrackColor: AppColors.bg,
+                        inactiveTrackColor: AppColors.bg(dark),
                         thumbColor: AppColors.cyan,
                         overlayColor: AppColors.cyan.withOpacity(0.2),
                       ),
                       child: Slider(
                         value: _speechRate,
-                        min: 0.2,
-                        max: 0.9,
-                        divisions: 7,
-                        onChanged: (v) =>
-                            setState(() => _speechRate = v),
+                        min: 0.2, max: 0.9, divisions: 7,
+                        onChanged: (v) => setState(() => _speechRate = v),
                       ),
                     ),
                   ],
@@ -171,155 +150,99 @@ class _VocalScreenState extends State<VocalScreen> {
 
             const SizedBox(height: 16),
 
-            // Word list
             Expanded(
               child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.cyan))
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.cyan))
                   : _words.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
-                                  Icons.record_voice_over_rounded,
-                                  size: 64,
-                                  color: Colors.white24),
+                              const Icon(Icons.record_voice_over_rounded, size: 64, color: Colors.white24),
                               const SizedBox(height: 16),
-                              Text(
-                                'No words yet!\nScan objects to build your vocab.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 15),
-                              ),
+                              Text('No words yet!\nScan objects to build your vocab.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 15)),
                             ],
                           ),
                         )
                       : ListView.builder(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                           itemCount: _words.length,
                           itemBuilder: (context, index) {
                             final word = _words[index];
                             final name = word['word'] ?? '';
                             final phonetic = word['phonetic'] ?? '';
                             final definition = word['definition'] ?? '';
-                            final isSpeaking =
-                                _speakingIndex == index;
+                            final isSpeaking = _speakingIndex == index;
 
                             return Container(
-                              margin:
-                                  const EdgeInsets.only(bottom: 12),
+                              margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: isSpeaking
                                     ? AppColors.cyan.withOpacity(0.1)
-                                    : AppColors.card,
-                                borderRadius:
-                                    BorderRadius.circular(16),
+                                    : AppColors.card(dark),
+                                borderRadius: BorderRadius.circular(16),
                                 border: isSpeaking
-                                    ? Border.all(
-                                        color: AppColors.cyan,
-                                        width: 1.5)
+                                    ? Border.all(color: AppColors.cyan, width: 1.5)
                                     : null,
                               ),
                               child: Row(
                                 children: [
-                                  // Word info
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(name,
-                                            style: const TextStyle(
-                                                fontSize: 20,
-                                                fontWeight:
-                                                    FontWeight.w700,
-                                                color: AppColors
-                                                    .textPrimary)),
+                                            style: TextStyle(
+                                                fontSize: 20, fontWeight: FontWeight.w700,
+                                                color: AppColors.textPrimary(dark))),
                                         if (phonetic.isNotEmpty)
                                           Text(phonetic,
-                                              style: TextStyle(
-                                                  fontSize: 13,
-                                                  color:
-                                                      AppColors.cyan,
-                                                  fontStyle:
-                                                      FontStyle
-                                                          .italic)),
+                                              style: const TextStyle(
+                                                  fontSize: 13, color: AppColors.cyan,
+                                                  fontStyle: FontStyle.italic)),
                                         if (definition.isNotEmpty)
                                           Padding(
-                                            padding:
-                                                const EdgeInsets.only(
-                                                    top: 4),
+                                            padding: const EdgeInsets.only(top: 4),
                                             child: Text(
                                               definition.length > 60
                                                   ? '${definition.substring(0, 60)}...'
                                                   : definition,
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: AppColors
-                                                      .textSecondary),
+                                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary(dark)),
                                             ),
                                           ),
                                       ],
                                     ),
                                   ),
-
                                   const SizedBox(width: 12),
-
-                                  // Slow button
                                   GestureDetector(
-                                    onTap: () =>
-                                        _speakSlow(name, index),
+                                    onTap: () => _speakSlow(name, index),
                                     child: Container(
-                                      width: 40,
-                                      height: 40,
+                                      width: 40, height: 40,
                                       decoration: BoxDecoration(
-                                        color: AppColors.bg,
-                                        borderRadius:
-                                            BorderRadius.circular(
-                                                12),
-                                        border: Border.all(
-                                            color: Colors.white12),
+                                        color: AppColors.bg(dark),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: AppColors.border(dark)),
                                       ),
-                                      child: const Icon(
-                                          Icons.slow_motion_video_rounded,
-                                          color: AppColors
-                                              .textSecondary,
-                                          size: 18),
+                                      child: Icon(Icons.slow_motion_video_rounded,
+                                          color: AppColors.textSecondary(dark), size: 18),
                                     ),
                                   ),
-
                                   const SizedBox(width: 8),
-
-                                  // Play button
                                   GestureDetector(
-                                    onTap: () =>
-                                        _speak(name, index),
+                                    onTap: () => _speak(name, index),
                                     child: Container(
-                                      width: 48,
-                                      height: 48,
+                                      width: 48, height: 48,
                                       decoration: BoxDecoration(
-                                        color: isSpeaking
-                                            ? AppColors.cyan
-                                            : AppColors.cyan
-                                                .withOpacity(0.15),
+                                        color: isSpeaking ? AppColors.cyan : AppColors.cyan.withOpacity(0.15),
                                         shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: AppColors.cyan,
-                                            width: 1.5),
+                                        border: Border.all(color: AppColors.cyan, width: 1.5),
                                       ),
                                       child: Icon(
-                                        isSpeaking
-                                            ? Icons.stop_rounded
-                                            : Icons
-                                                .play_arrow_rounded,
-                                        color: isSpeaking
-                                            ? Colors.black
-                                            : AppColors.cyan,
+                                        isSpeaking ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                                        color: isSpeaking ? Colors.black : AppColors.cyan,
                                         size: 24,
                                       ),
                                     ),

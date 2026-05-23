@@ -6,7 +6,7 @@ class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
   @override
-  _EditProfileScreenState createState() => _EditProfileScreenState();
+  State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
@@ -36,8 +36,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _nameController.text = prefs.getString('profile_name') ?? 'Nattaya K.';
-      _cityController.text = prefs.getString('profile_city') ?? 'Bangkok';
+      _nameController.text =
+          prefs.getString('profile_name') ?? 'Nattaya K.';
+      _cityController.text =
+          prefs.getString('profile_city') ?? 'Bangkok';
       _selectedLanguage =
           prefs.getString('profile_language') ?? 'English (US)';
     });
@@ -50,7 +52,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     await prefs.setString('profile_city', _cityController.text.trim());
     await prefs.setString('profile_language', _selectedLanguage);
     setState(() => _isSaving = false);
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -72,26 +73,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dark = ThemeProvider.isDark(context);
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: AppColors.bg(dark),
       appBar: AppBar(
-        backgroundColor: AppColors.bg,
+        backgroundColor: AppColors.bg(dark),
         elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: AppColors.card(dark),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white, size: 18),
+            child: Icon(Icons.arrow_back_ios_new_rounded,
+                color: AppColors.textPrimary(dark), size: 18),
           ),
         ),
-        title: const Text('Edit Profile',
+        title: Text('Edit Profile',
             style: TextStyle(
-                color: AppColors.textPrimary,
+                color: AppColors.textPrimary(dark),
                 fontSize: 18,
                 fontWeight: FontWeight.w700)),
         centerTitle: true,
@@ -128,81 +130,76 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             // Avatar
             Center(
-              child: Stack(
-                children: [
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.cyan, width: 2.5),
-                      color: AppColors.card,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _nameController.text.isNotEmpty
-                            ? _nameController.text[0].toUpperCase()
-                            : 'N',
-                        style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.cyan),
-                      ),
-                    ),
+              child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.cyan, width: 2.5),
+                  color: AppColors.card(dark),
+                ),
+                child: Center(
+                  child: Text(
+                    _nameController.text.isNotEmpty
+                        ? _nameController.text[0].toUpperCase()
+                        : 'N',
+                    style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.cyan),
                   ),
-                ],
+                ),
               ),
             ),
 
             const SizedBox(height: 32),
 
-            // Name field
-            _FieldLabel('Display Name'),
+            _FieldLabel('Display Name', dark),
             const SizedBox(height: 8),
             _InputField(
               controller: _nameController,
               hint: 'Your name',
               icon: Icons.person_rounded,
+              dark: dark,
               onChanged: (_) => setState(() {}),
             ),
 
             const SizedBox(height: 20),
 
-            // City field
-            _FieldLabel('City'),
+            _FieldLabel('City', dark),
             const SizedBox(height: 8),
             _InputField(
               controller: _cityController,
               hint: 'Your city',
               icon: Icons.location_on_rounded,
+              dark: dark,
             ),
 
             const SizedBox(height: 20),
 
-            // Language dropdown
-            _FieldLabel('Target Language'),
+            _FieldLabel('Target Language', dark),
             const SizedBox(height: 8),
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.card,
+                color: AppColors.card(dark),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.border(dark)),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _selectedLanguage,
                   isExpanded: true,
-                  dropdownColor: AppColors.card,
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.textSecondary),
+                  dropdownColor: AppColors.card(dark),
+                  icon: Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textSecondary(dark)),
                   items: _languages
                       .map((lang) => DropdownMenuItem(
                             value: lang,
                             child: Text(lang,
-                                style: const TextStyle(
-                                    color: AppColors.textPrimary,
+                                style: TextStyle(
+                                    color: AppColors.textPrimary(dark),
                                     fontSize: 15)),
                           ))
                       .toList(),
@@ -214,7 +211,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 40),
 
-            // Save button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -246,13 +242,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
 class _FieldLabel extends StatelessWidget {
   final String text;
-  const _FieldLabel(this.text);
+  final bool dark;
+  const _FieldLabel(this.text, this.dark);
 
   @override
   Widget build(BuildContext context) {
     return Text(text,
-        style: const TextStyle(
-            color: AppColors.textSecondary,
+        style: TextStyle(
+            color: AppColors.textSecondary(dark),
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5));
@@ -263,12 +260,14 @@ class _InputField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final IconData icon;
+  final bool dark;
   final void Function(String)? onChanged;
 
   const _InputField({
     required this.controller,
     required this.hint,
     required this.icon,
+    required this.dark,
     this.onChanged,
   });
 
@@ -276,18 +275,19 @@ class _InputField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: AppColors.card(dark),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: AppColors.border(dark)),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+        style: TextStyle(color: AppColors.textPrimary(dark), fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.textSecondary),
-          prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 20),
+          hintStyle: TextStyle(color: AppColors.textSecondary(dark)),
+          prefixIcon:
+              Icon(icon, color: AppColors.textSecondary(dark), size: 20),
           border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
