@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
-import 'database_service.dart';
+import 'firestore_service.dart';
 import 'main.dart';
 
 class HomeScreen extends StatefulWidget {

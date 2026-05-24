@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'app_theme.dart';
-import 'database_service.dart';
+import 'firestore_service.dart';
 
 class VocalScreen extends StatefulWidget {
   const VocalScreen({super.key});

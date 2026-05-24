@@ -1,6 +1,5 @@
 name: ar_language_app
 description: Object scanning vocabulary learning app
-
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -10,37 +9,23 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # Camera
-  camera: ^0.10.5
-
-  # ML Kit Image Labeling — working version
-  google_mlkit_image_labeling: ^0.12.0
-
-  # Text-to-speech
-  flutter_tts: ^3.8.5
-
-  # Local database
-  sqflite: ^2.3.0
-  path: ^1.8.3
-
-  # Shared prefs
-  shared_preferences: ^2.2.2
-
-  # Path provider
-  path_provider: ^2.1.2
-
-  # HTTP for dictionary API
-  http: ^1.2.1
+  google_mlkit_image_labeling: ^0.11.0
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.3
+  firebase_storage: ^12.3.2
+  # OpenAI
+  http: ^1.2.0
+  # Other
+  camera: 0.10.9+1
+  shared_preferences: ^2.3.2
+  flutter_tts: ^4.2.0
+  tflite_flutter: ^0.10.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
-
-  assets:
-    - assets/detect.tflite
-    - assets/labelmap.txt

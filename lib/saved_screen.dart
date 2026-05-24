@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'database_service.dart';
+import 'firestore_service.dart';
 import 'app_theme.dart';
 
 class SavedScreen extends StatefulWidget {
@@ -24,8 +24,9 @@ class _SavedScreenState extends State<SavedScreen> {
     if (mounted) setState(() { _savedWords = words; _loading = false; });
   }
 
-  Future<void> _deleteWord(int id) async {
-    await DatabaseService.deleteWord(id);
+  // Fixed: uses String word (matches Firestore doc ID) instead of int id
+  Future<void> _deleteWord(String word) async {
+    await DatabaseService.deleteWord(word);
     _loadWords();
   }
 
@@ -98,7 +99,8 @@ class _SavedScreenState extends State<SavedScreen> {
                             word: e.value['word'] ?? '',
                             translation: e.value['phonetic'] ?? '',
                             streak: streak, isNew: streak == 0, dark: dark,
-                            onDelete: () => _deleteWord(e.value['id']));
+                            // Fixed: pass word string instead of id
+                            onDelete: () => _deleteWord(e.value['word'] ?? ''));
                         }),
                         if (_needsReview().isNotEmpty) ...[
                           const SizedBox(height: 20),
@@ -107,7 +109,8 @@ class _SavedScreenState extends State<SavedScreen> {
                           ..._needsReview().map((w) => _WordCard(
                             word: w['word'] ?? '', translation: w['phonetic'] ?? '',
                             streak: 0, needsReview: true, dark: dark,
-                            onDelete: () => _deleteWord(w['id']))),
+                            // Fixed: pass word string instead of id
+                            onDelete: () => _deleteWord(w['word'] ?? ''))),
                         ],
                       ],
                     ),

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'database_service.dart';
+import 'firestore_service.dart';
 import 'app_theme.dart';
 
 class QuizScreen extends StatefulWidget {
