@@ -310,17 +310,17 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 children: [
                   Expanded(child: _RatingButton(
                     icon: Icons.close_rounded, label: 'Again',
-                    color: Colors.redAccent, bgColor: Colors.red.withOpacity(0.12),
+                    color: Colors.redAccent, bgColor: Colors.red.withValues(alpha: 0.12),
                     onTap: () => _nextCard('again'))),
                   const SizedBox(width: 10),
                   Expanded(child: _RatingButton(
                     icon: Icons.remove_rounded, label: 'So-so',
-                    color: const Color(0xFFFFB300), bgColor: const Color(0xFFFFB300).withOpacity(0.1),
+                    color: const Color(0xFFFFB300), bgColor: const Color(0xFFFFB300).withValues(alpha: 0.1),
                     onTap: () => _nextCard('soSo'))),
                   const SizedBox(width: 10),
                   Expanded(child: _RatingButton(
                     icon: Icons.check_rounded, label: 'Known',
-                    color: Colors.greenAccent, bgColor: Colors.green.withOpacity(0.12),
+                    color: Colors.greenAccent, bgColor: Colors.green.withValues(alpha: 0.12),
                     onTap: () => _nextCard('known'))),
                 ],
               ),
@@ -346,7 +346,7 @@ class _CardFront extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card(dark),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.cyan.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: AppColors.cyan.withValues(alpha: 0.3), width: 1.5),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -387,7 +387,7 @@ class _CardFront extends StatelessWidget {
                 Container(
                   width: 36, height: 36,
                   decoration: BoxDecoration(
-                    color: AppColors.cyan.withOpacity(0.15),
+                    color: AppColors.cyan.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.cyan, width: 1.5),
                   ),
@@ -423,7 +423,7 @@ class _CardBack extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0E1F10),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.greenAccent.withOpacity(0.25), width: 1.5),
+        border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.25), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,7 +443,7 @@ class _CardBack extends StatelessWidget {
                   child: Container(
                     width: 32, height: 32,
                     decoration: BoxDecoration(
-                      color: AppColors.cyan.withOpacity(0.15),
+                      color: AppColors.cyan.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.cyan, width: 1.5),
                     ),
@@ -465,7 +465,7 @@ class _CardBack extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.darkCard.withOpacity(0.6),
+                color: AppColors.darkCard.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -486,7 +486,7 @@ class _CardBack extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.darkCard.withOpacity(0.6),
+                color: AppColors.darkCard.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -509,7 +509,7 @@ class _CardBack extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: Colors.greenAccent.withOpacity(0.6), width: 3))),
+                border: Border(left: BorderSide(color: Colors.greenAccent.withValues(alpha: 0.6), width: 3))),
               child: Text('"$example"',
                   style: const TextStyle(fontSize: 13, color: Color(0xFF8A8A9A),
                       fontStyle: FontStyle.italic, height: 1.4)),
@@ -540,7 +540,7 @@ class _RatingButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -565,9 +565,9 @@ class _CounterChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4), width: 1),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
       ),
       child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
     );
@@ -585,9 +585,9 @@ class _ResultChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Column(
         children: [

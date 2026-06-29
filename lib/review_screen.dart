@@ -17,8 +17,13 @@ class _ReviewScreenState extends State<ReviewScreen> {
   void initState() { super.initState(); _loadWords(); }
 
   Future<void> _loadWords() async {
-    final words = await DatabaseService.getSavedWords();
-    if (mounted) setState(() { _savedWords = words; _loading = false; });
+    try {
+      final words = await DatabaseService.getSavedWords();
+      if (mounted) setState(() { _savedWords = words; _loading = false; });
+    } catch (e) {
+      debugPrint('ReviewScreen load error: $e');
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   List<Map<String, dynamic>> get _needsReview {
@@ -155,9 +160,9 @@ class _ActionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: color.withOpacity(dark ? 0.12 : 0.08),
+          color: color.withValues(alpha: dark ? 0.12 : 0.08),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5)),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(icon, color: color, size: 28),
           const SizedBox(height: 10),
@@ -182,7 +187,7 @@ class _ReviewWordTile extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
     decoration: BoxDecoration(
       color: AppColors.card(dark), borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
       boxShadow: [BoxShadow(color: AppColors.shadow(dark), blurRadius: 4)],
     ),
     child: Row(children: [
@@ -261,7 +266,7 @@ class _FlashcardSheetState extends State<_FlashcardSheet> {
                     color: AppColors.card(dark),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: _flipped ? AppColors.cyan.withOpacity(0.4) : AppColors.border(dark)),
+                      color: _flipped ? AppColors.cyan.withValues(alpha: 0.4) : AppColors.border(dark)),
                     boxShadow: [BoxShadow(color: AppColors.shadow(dark), blurRadius: 12)],
                   ),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [

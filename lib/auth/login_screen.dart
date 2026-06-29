@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../firestore_service.dart';
 import '../app_theme.dart';
 import 'signup_screen.dart';
 
@@ -54,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Container(
                   width: 72, height: 72,
                   decoration: BoxDecoration(
-                    color: AppColors.cyan.withOpacity(0.15),
+                    color: AppColors.cyan.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppColors.cyan, width: 2),
                   ),

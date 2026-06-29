@@ -131,10 +131,10 @@ class _GobotScreenState extends State<GobotScreen> {
                   Container(
                     width: 44, height: 44,
                     decoration: BoxDecoration(
-                      color: AppColors.cyan.withOpacity(0.15),
+                      color: AppColors.cyan.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: AppColors.cyan.withOpacity(0.4), width: 1.5),
+                          color: AppColors.cyan.withValues(alpha: 0.4), width: 1.5),
                     ),
                     child: const Icon(Icons.smart_toy_rounded,
                         color: AppColors.cyan, size: 24),
@@ -260,7 +260,7 @@ class _GobotScreenState extends State<GobotScreen> {
               Container(
                 width: 36, height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.cyan.withOpacity(0.15),
+                  color: AppColors.cyan.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.smart_toy_rounded,
@@ -387,7 +387,7 @@ class _MessageBubble extends StatelessWidget {
           Container(
             width: 36, height: 36,
             decoration: BoxDecoration(
-              color: AppColors.cyan.withOpacity(0.15),
+              color: AppColors.cyan.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.smart_toy_rounded,
@@ -473,13 +473,13 @@ class _MessageBubble extends StatelessWidget {
                                   horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 color: isSaved
-                                    ? AppColors.cyan.withOpacity(0.15)
-                                    : const Color(0xFF7C5CBF).withOpacity(0.15),
+                                    ? AppColors.cyan.withValues(alpha: 0.15)
+                                    : const Color(0xFF7C5CBF).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: isSaved
-                                      ? AppColors.cyan.withOpacity(0.4)
-                                      : const Color(0xFF7C5CBF).withOpacity(0.4),
+                                      ? AppColors.cyan.withValues(alpha: 0.4)
+                                      : const Color(0xFF7C5CBF).withValues(alpha: 0.4),
                                 ),
                               ),
                               child: Text(tag,
@@ -570,7 +570,7 @@ class _TypingBubbleState extends State<_TypingBubble>
           Container(
             width: 36, height: 36,
             decoration: BoxDecoration(
-              color: AppColors.cyan.withOpacity(0.15),
+              color: AppColors.cyan.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.smart_toy_rounded,
@@ -592,8 +592,8 @@ class _TypingBubbleState extends State<_TypingBubble>
                     width: 7, height: 7,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.cyan.withOpacity(
-                          0.3 + 0.7 * (((_anim.value + i * 0.3) % 1.0))),
+                      color: AppColors.cyan.withValues(
+                          alpha: 0.3 + 0.7 * (((_anim.value + i * 0.3) % 1.0))),
                     ),
                   );
                 }),

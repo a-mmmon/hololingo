@@ -4,13 +4,11 @@ import 'package:camera/camera.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
-import 'saved_screen.dart';
 import 'quiz_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'review_screen.dart';
 import 'gobot_screen.dart';
-import 'auth/login_screen.dart';
 import 'auth/auth_gate.dart';
 import 'dictionary_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -26,7 +24,6 @@ Future<void> main() async {
     const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
   );
 
-  // Init Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -84,7 +81,6 @@ class _MyAppState extends State<MyApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: _themeNotifier.themeData,
-            // AuthGate decides: show login or main app
             home: const AuthGate(),
           );
         },
@@ -93,7 +89,7 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-// ── Tab Switcher ──────────────────────────────────────────────────────────────
+// ── Tab Switcher ───────────────────────────────────────────────────────────────
 class TabSwitcher extends InheritedWidget {
   final void Function(int) switchTab;
   const TabSwitcher({
@@ -107,7 +103,7 @@ class TabSwitcher extends InheritedWidget {
   bool updateShouldNotify(TabSwitcher old) => false;
 }
 
-// ── App Shell ─────────────────────────────────────────────────────────────────
+// ── App Shell ──────────────────────────────────────────────────────────────────
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
   @override
@@ -116,17 +112,24 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
+
   void _switchTab(int index) => setState(() => _currentIndex = index);
+
+  // Only cache tabs that are safe to keep alive (not camera, not profile)
   final Map<int, Widget> _tabCache = {};
 
   Widget _buildTab(int index) {
+    // Profile: never cache — always rebuild fresh so data reloads
+    if (index == 4) return ProfileScreen();
+
+    // Camera: never cache — so it doesn't bleed through other tabs
+    if (index == 1) return const CameraTab();
+
     if (!_tabCache.containsKey(index)) {
       _tabCache[index] = switch (index) {
         0 => const HomeScreen(),
-        1 => const CameraTab(),
         2 => const ReviewScreen(),
         3 => const GobotScreen(),
-        4 => ProfileScreen(),
         _ => const SizedBox.shrink(),
       };
     }
@@ -140,14 +143,9 @@ class _AppShellState extends State<AppShell> {
       switchTab: _switchTab,
       child: Scaffold(
         backgroundColor: AppColors.bg(dark),
-        body: Stack(
-          children: List.generate(5, (i) => Offstage(
-            offstage: _currentIndex != i,
-            child: TickerMode(
-              enabled: _currentIndex == i,
-              child: _buildTab(i),
-            ),
-          )),
+        body: IndexedStack(
+          index: _currentIndex,
+          children: List.generate(5, (i) => _buildTab(i)),
         ),
         bottomNavigationBar: _AppBottomNav(
           currentIndex: _currentIndex,
@@ -158,7 +156,7 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-// ── Bottom Nav ────────────────────────────────────────────────────────────────
+// ── Bottom Nav ─────────────────────────────────────────────────────────────────
 class _AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final void Function(int) onTap;
@@ -178,7 +176,8 @@ class _AppBottomNav extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card(dark),
-        border: Border(top: BorderSide(color: AppColors.border(dark), width: 1)),
+        border:
+            Border(top: BorderSide(color: AppColors.border(dark), width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -198,36 +197,54 @@ class _AppBottomNav extends StatelessWidget {
                       if (item.isGobot)
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          width: 36, height: 36,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color: selected ? AppColors.cyan : AppColors.secondary(dark),
+                            color: selected
+                                ? AppColors.cyan
+                                : AppColors.secondary(dark),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: selected ? AppColors.cyan : AppColors.border(dark),
+                              color: selected
+                                  ? AppColors.cyan
+                                  : AppColors.border(dark),
                               width: 1.5,
                             ),
                           ),
-                          child: Icon(Icons.smart_toy_rounded, size: 20,
-                            color: selected ? Colors.black : AppColors.textSecondary(dark)),
+                          child: Icon(Icons.smart_toy_rounded,
+                              size: 20,
+                              color: selected
+                                  ? Colors.black
+                                  : AppColors.textSecondary(dark)),
                         )
                       else
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          width: 36, height: 36,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color: selected ? AppColors.cyan.withOpacity(0.15) : Colors.transparent,
+                            color: selected
+                                ? AppColors.cyan.withValues(alpha: 0.15)
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(item.icon, size: 22,
-                            color: selected ? AppColors.cyan : AppColors.textSecondary(dark)),
+                          child: Icon(item.icon,
+                              size: 22,
+                              color: selected
+                                  ? AppColors.cyan
+                                  : AppColors.textSecondary(dark)),
                         ),
                       const SizedBox(height: 4),
                       Text(item.label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                          color: selected ? AppColors.cyan : AppColors.textSecondary(dark),
-                        )),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: selected
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            color: selected
+                                ? AppColors.cyan
+                                : AppColors.textSecondary(dark),
+                          )),
                     ],
                   ),
                 ),
@@ -247,7 +264,7 @@ class _NavItem {
   const _NavItem({this.icon, required this.label, this.isGobot = false});
 }
 
-// ── Camera Tab (unchanged) ────────────────────────────────────────────────────
+// ── Camera Tab ─────────────────────────────────────────────────────────────────
 class CameraTab extends StatefulWidget {
   const CameraTab({super.key});
   @override
@@ -279,21 +296,43 @@ class _CameraTabState extends State<CameraTab> {
 
   Future<void> _initCamera() async {
     if (cameras.isEmpty) {
-      setState(() { _hasCameraError = true; _cameraError = 'No cameras found.'; });
+      setState(() {
+        _hasCameraError = true;
+        _cameraError = 'No cameras found.';
+      });
       return;
     }
     try {
-      final controller = CameraController(cameras[0], ResolutionPreset.high, enableAudio: false);
+      final controller = CameraController(
+          cameras[0], ResolutionPreset.high,
+          enableAudio: false);
       await controller.initialize();
-      if (!mounted) { controller.dispose(); return; }
-      setState(() { _controller = controller; _isInitialized = true; _hasCameraError = false; });
+      if (!mounted) {
+        controller.dispose();
+        return;
+      }
+      setState(() {
+        _controller = controller;
+        _isInitialized = true;
+        _hasCameraError = false;
+      });
     } catch (e) {
-      if (mounted) setState(() { _hasCameraError = true; _cameraError = 'Camera error: $e'; });
+      if (mounted) {
+        setState(() {
+          _hasCameraError = true;
+          _cameraError = 'Camera error: $e';
+        });
+      }
     }
   }
 
   Future<void> _lookupWord(String word, {String? imagePath}) async {
-    setState(() { _isLoadingWord = true; _showOverlay = true; _detectedWord = word; _lastImagePath = imagePath; });
+    setState(() {
+      _isLoadingWord = true;
+      _showOverlay = true;
+      _detectedWord = word;
+      _lastImagePath = imagePath;
+    });
     final result = await DictionaryService.getWordInfo(word);
     if (!mounted) return;
     setState(() {
@@ -328,12 +367,18 @@ class _CameraTabState extends State<CameraTab> {
           duration: Duration(seconds: 2),
         ));
       }
-    } catch (e) { debugPrint('Detection error: $e'); }
+    } catch (e) {
+      debugPrint('Detection error: $e');
+    }
     if (mounted) setState(() => _isDetecting = false);
   }
 
   @override
-  void dispose() { _controller?.dispose(); DetectorService.dispose(); super.dispose(); }
+  void dispose() {
+    _controller?.dispose();
+    DetectorService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -342,72 +387,129 @@ class _CameraTabState extends State<CameraTab> {
     return _buildBody();
   }
 
-  Widget _buildLoading() => const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-    CircularProgressIndicator(color: AppColors.cyan), SizedBox(height: 16),
-    Text('Starting camera...', style: TextStyle(color: Colors.white54)),
-  ]));
+  Widget _buildLoading() => const Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+        CircularProgressIndicator(color: AppColors.cyan),
+        SizedBox(height: 16),
+        Text('Starting camera...',
+            style: TextStyle(color: Colors.white54)),
+      ]));
 
-  Widget _buildError() => Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisSize: MainAxisSize.min, children: [
-    const Icon(Icons.no_photography_outlined, color: Colors.white38, size: 64),
-    const SizedBox(height: 16),
-    Text(_cameraError, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 14)),
-    const SizedBox(height: 24),
-    GestureDetector(
-      onTap: () { setState(() { _hasCameraError = false; _isInitialized = false; }); _initCamera(); },
-      child: Container(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(border: Border.all(color: AppColors.cyan), borderRadius: BorderRadius.circular(24)),
-        child: const Text('Retry', style: TextStyle(color: AppColors.cyan))),
-    ),
-  ])));
+  Widget _buildError() => Center(
+          child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.no_photography_outlined,
+                color: Colors.white38, size: 64),
+            const SizedBox(height: 16),
+            Text(_cameraError,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(color: Colors.white60, fontSize: 14)),
+            const SizedBox(height: 24),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _hasCameraError = false;
+                  _isInitialized = false;
+                });
+                _initCamera();
+              },
+              child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 12),
+                  decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.cyan),
+                      borderRadius: BorderRadius.circular(24)),
+                  child: const Text('Retry',
+                      style: TextStyle(color: AppColors.cyan))),
+            ),
+          ])));
 
   Widget _buildBody() {
     final dark = ThemeProvider.isDark(context);
     return Stack(children: [
       SizedBox.expand(child: CameraPreview(_controller!)),
-      Container(decoration: BoxDecoration(gradient: RadialGradient(
-        center: Alignment.center, radius: 1.2,
-        colors: [Colors.transparent, Colors.black.withOpacity(0.35)]))),
+      Container(
+          decoration: BoxDecoration(
+              gradient: RadialGradient(center: Alignment.center, radius: 1.2, colors: [
+        Colors.transparent,
+        Colors.black.withValues(alpha: 0.35)
+      ]))),
       Positioned.fill(child: CustomPaint(painter: _CornerPainter())),
-      Positioned(top: 56, left: 0, right: 0, child: Center(child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(color: Colors.black.withOpacity(0.55),
-          borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12)),
-        child: const Text('Point camera at any object', style: TextStyle(color: Colors.white, fontSize: 14)),
-      ))),
+      Positioned(
+          top: 56,
+          left: 0,
+          right: 0,
+          child: Center(
+              child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white12)),
+            child: const Text('Point camera at any object',
+                style: TextStyle(color: Colors.white, fontSize: 14)),
+          ))),
       if (_showOverlay)
-        Positioned(bottom: 0, left: 0, right: 0, child: _WordPanel(
-          word: _detectedWord, phonetic: _phonetic, partOfSpeech: _partOfSpeech,
-          definition: _definition, example: _example, isLoading: _isLoadingWord, isDark: dark,
-          onClose: () => setState(() => _showOverlay = false),
-          onListen: () => _speak(_detectedWord),
-          onSave: () async {
-            await FirestoreService.saveWord({
-              'word': _detectedWord, 'phonetic': _phonetic,
-              'definition': _definition, 'example': _example,
-              'image_path': _lastImagePath ?? '',
-            });
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('"$_detectedWord" saved!'),
-                backgroundColor: Colors.green[700],
-                duration: const Duration(seconds: 2),
-              ));
-            }
-          },
-          onQuiz: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QuizScreen())),
-        )),
+        Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _WordPanel(
+              word: _detectedWord,
+              phonetic: _phonetic,
+              partOfSpeech: _partOfSpeech,
+              definition: _definition,
+              example: _example,
+              isLoading: _isLoadingWord,
+              isDark: dark,
+              onClose: () => setState(() => _showOverlay = false),
+              onListen: () => _speak(_detectedWord),
+              onSave: () async {
+                await FirestoreService.saveWord({
+                  'word': _detectedWord,
+                  'phonetic': _phonetic,
+                  'definition': _definition,
+                  'example': _example,
+                  'image_path': _lastImagePath ?? '',
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('"$_detectedWord" saved!'),
+                    backgroundColor: Colors.green[700],
+                    duration: const Duration(seconds: 2),
+                  ));
+                }
+              },
+              onQuiz: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const QuizScreen())),
+            )),
       if (!_showOverlay)
-        Positioned(bottom: 100, left: 0, right: 0, child: Center(child: GestureDetector(
-          onTap: _isDetecting ? null : _startDetection,
-          child: Container(width: 64, height: 64,
-            decoration: BoxDecoration(shape: BoxShape.circle,
-              color: AppColors.cyan.withOpacity(0.15),
-              border: Border.all(color: AppColors.cyan, width: 2.5)),
-            child: _isDetecting
-              ? const Padding(padding: EdgeInsets.all(16),
-                  child: CircularProgressIndicator(color: AppColors.cyan, strokeWidth: 2.5))
-              : const Icon(Icons.camera_alt_rounded, color: AppColors.cyan, size: 28)),
-        ))),
+        Positioned(
+            bottom: 100,
+            left: 0,
+            right: 0,
+            child: Center(
+                child: GestureDetector(
+              onTap: _isDetecting ? null : _startDetection,
+              child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.cyan.withValues(alpha: 0.15),
+                      border:
+                          Border.all(color: AppColors.cyan, width: 2.5)),
+                  child: _isDetecting
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(
+                              color: AppColors.cyan, strokeWidth: 2.5))
+                      : const Icon(Icons.camera_alt_rounded,
+                          color: AppColors.cyan, size: 28)),
+            ))),
     ]);
   }
 }
@@ -415,18 +517,30 @@ class _CameraTabState extends State<CameraTab> {
 class _CornerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = AppColors.scannerCorner..strokeWidth = 3
-      ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+    final paint = Paint()
+      ..color = AppColors.scannerCorner
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
     const len = 28.0, m = 28.0;
-    canvas.drawLine(const Offset(m, m + len), const Offset(m, m), paint);
-    canvas.drawLine(const Offset(m, m), const Offset(m + len, m), paint);
-    canvas.drawLine(Offset(size.width - m - len, m), Offset(size.width - m, m), paint);
-    canvas.drawLine(Offset(size.width - m, m), Offset(size.width - m, m + len), paint);
-    canvas.drawLine(Offset(m, size.height - m - len), Offset(m, size.height - m), paint);
-    canvas.drawLine(Offset(m, size.height - m), Offset(m + len, size.height - m), paint);
-    canvas.drawLine(Offset(size.width - m - len, size.height - m), Offset(size.width - m, size.height - m), paint);
-    canvas.drawLine(Offset(size.width - m, size.height - m - len), Offset(size.width - m, size.height - m), paint);
+    canvas.drawLine(
+        const Offset(m, m + len), const Offset(m, m), paint);
+    canvas.drawLine(
+        const Offset(m, m), const Offset(m + len, m), paint);
+    canvas.drawLine(Offset(size.width - m - len, m),
+        Offset(size.width - m, m), paint);
+    canvas.drawLine(Offset(size.width - m, m),
+        Offset(size.width - m, m + len), paint);
+    canvas.drawLine(Offset(m, size.height - m - len),
+        Offset(m, size.height - m), paint);
+    canvas.drawLine(Offset(m, size.height - m),
+        Offset(m + len, size.height - m), paint);
+    canvas.drawLine(Offset(size.width - m - len, size.height - m),
+        Offset(size.width - m, size.height - m), paint);
+    canvas.drawLine(Offset(size.width - m, size.height - m - len),
+        Offset(size.width - m, size.height - m), paint);
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
@@ -435,52 +549,139 @@ class _WordPanel extends StatelessWidget {
   final String word, phonetic, partOfSpeech, definition, example;
   final bool isLoading, isDark;
   final VoidCallback onClose, onListen, onSave, onQuiz;
-  const _WordPanel({required this.word, required this.phonetic, required this.partOfSpeech,
-    required this.definition, required this.example, required this.isLoading,
-    required this.isDark, required this.onClose, required this.onListen,
-    required this.onSave, required this.onQuiz});
+  const _WordPanel(
+      {required this.word,
+      required this.phonetic,
+      required this.partOfSpeech,
+      required this.definition,
+      required this.example,
+      required this.isLoading,
+      required this.isDark,
+      required this.onClose,
+      required this.onListen,
+      required this.onSave,
+      required this.onQuiz});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-      decoration: BoxDecoration(color: AppColors.card(isDark),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.1), blurRadius: 20, offset: const Offset(0, -4))]),
-      child: isLoading
-        ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator(color: AppColors.cyan)))
-        : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(color: AppColors.border(isDark), borderRadius: BorderRadius.circular(2)))),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(word, style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary(isDark), letterSpacing: -0.5)),
-              const SizedBox(width: 10),
-              Padding(padding: const EdgeInsets.only(bottom: 6),
-                child: Text('· $partOfSpeech', style: TextStyle(color: AppColors.textSecondary(isDark), fontSize: 14))),
-              const Spacer(),
-              GestureDetector(onTap: onClose, child: Icon(Icons.close_rounded, color: AppColors.textSecondary(isDark))),
-            ]),
-            if (phonetic.isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: 2, bottom: 10),
-                child: Text(phonetic, style: const TextStyle(color: AppColors.cyan, fontSize: 14, fontStyle: FontStyle.italic))),
-            Text(definition, style: TextStyle(color: AppColors.textPrimary(isDark), fontSize: 15, height: 1.5)),
-            if (example.isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: 10), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(width: 3, height: 48, margin: const EdgeInsets.only(right: 10),
-                  decoration: BoxDecoration(color: AppColors.cyan, borderRadius: BorderRadius.circular(2))),
-                Expanded(child: Text('"$example"', style: TextStyle(color: AppColors.textSecondary(isDark),
-                  fontSize: 13, fontStyle: FontStyle.italic, height: 1.5))),
-              ])),
-            const SizedBox(height: 18),
-            Row(children: [
-              _ActionBtn(icon: Icons.play_arrow_rounded, label: 'Listen', onTap: onListen, filled: true, isDark: isDark),
-              const SizedBox(width: 10),
-              _ActionBtn(icon: Icons.add_rounded, label: 'Save', onTap: onSave, isDark: isDark),
-              const SizedBox(width: 10),
-              _ActionBtn(icon: Icons.quiz_rounded, label: 'Quiz me', onTap: onQuiz, isDark: isDark),
-            ]),
+      decoration: BoxDecoration(
+          color: AppColors.card(isDark),
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black
+                    .withValues(alpha: isDark ? 0.4 : 0.1),
+                blurRadius: 20,
+                offset: const Offset(0, -4))
           ]),
+      child: isLoading
+          ? const SizedBox(
+              height: 120,
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: AppColors.cyan)))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                  Center(
+                      child: Container(
+                          width: 36,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                              color: AppColors.border(isDark),
+                              borderRadius:
+                                  BorderRadius.circular(2)))),
+                  Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(word,
+                            style: TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary(isDark),
+                                letterSpacing: -0.5)),
+                        const SizedBox(width: 10),
+                        Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: 6),
+                            child: Text('· $partOfSpeech',
+                                style: TextStyle(
+                                    color: AppColors.textSecondary(
+                                        isDark),
+                                    fontSize: 14))),
+                        const Spacer(),
+                        GestureDetector(
+                            onTap: onClose,
+                            child: Icon(Icons.close_rounded,
+                                color:
+                                    AppColors.textSecondary(isDark))),
+                      ]),
+                  if (phonetic.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(
+                            top: 2, bottom: 10),
+                        child: Text(phonetic,
+                            style: const TextStyle(
+                                color: AppColors.cyan,
+                                fontSize: 14,
+                                fontStyle: FontStyle.italic))),
+                  Text(definition,
+                      style: TextStyle(
+                          color: AppColors.textPrimary(isDark),
+                          fontSize: 15,
+                          height: 1.5)),
+                  if (example.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Row(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                  width: 3,
+                                  height: 48,
+                                  margin: const EdgeInsets.only(
+                                      right: 10),
+                                  decoration: BoxDecoration(
+                                      color: AppColors.cyan,
+                                      borderRadius:
+                                          BorderRadius.circular(2))),
+                              Expanded(
+                                  child: Text('"$example"',
+                                      style: TextStyle(
+                                          color: AppColors
+                                              .textSecondary(isDark),
+                                          fontSize: 13,
+                                          fontStyle: FontStyle.italic,
+                                          height: 1.5))),
+                            ])),
+                  const SizedBox(height: 18),
+                  Row(children: [
+                    _ActionBtn(
+                        icon: Icons.play_arrow_rounded,
+                        label: 'Listen',
+                        onTap: onListen,
+                        filled: true,
+                        isDark: isDark),
+                    const SizedBox(width: 10),
+                    _ActionBtn(
+                        icon: Icons.add_rounded,
+                        label: 'Save',
+                        onTap: onSave,
+                        isDark: isDark),
+                    const SizedBox(width: 10),
+                    _ActionBtn(
+                        icon: Icons.quiz_rounded,
+                        label: 'Quiz me',
+                        onTap: onQuiz,
+                        isDark: isDark),
+                  ]),
+                ]),
     );
   }
 }
@@ -490,23 +691,43 @@ class _ActionBtn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool filled, isDark;
-  const _ActionBtn({required this.icon, required this.label, required this.onTap,
-    this.filled = false, required this.isDark});
+  const _ActionBtn(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.filled = false,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(onTap: onTap, child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: filled ? AppColors.cyan : Colors.transparent,
-        border: Border.all(color: filled ? AppColors.cyan : AppColors.border(isDark), width: 1.5),
-        borderRadius: BorderRadius.circular(24)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 16, color: filled ? Colors.black : AppColors.textPrimary(isDark)),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-          color: filled ? Colors.black : AppColors.textPrimary(isDark))),
-      ]),
-    ));
+    return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+              color: filled ? AppColors.cyan : Colors.transparent,
+              border: Border.all(
+                  color: filled
+                      ? AppColors.cyan
+                      : AppColors.border(isDark),
+                  width: 1.5),
+              borderRadius: BorderRadius.circular(24)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon,
+                size: 16,
+                color: filled
+                    ? Colors.black
+                    : AppColors.textPrimary(isDark)),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: filled
+                        ? Colors.black
+                        : AppColors.textPrimary(isDark))),
+          ]),
+        ));
   }
 }

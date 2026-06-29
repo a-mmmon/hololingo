@@ -170,7 +170,7 @@ class _QuizScreenState extends State<QuizScreen> {
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Image.file(File(imagePath), fit: BoxFit.cover,
-            color: Colors.black.withOpacity(0.55), colorBlendMode: BlendMode.darken,
+            color: Colors.black.withValues(alpha: 0.55), colorBlendMode: BlendMode.darken,
             errorBuilder: (_, __, ___) => const SizedBox())),
         const Center(child: Text('?', style: TextStyle(
           fontSize: 64, color: AppColors.cyan, fontWeight: FontWeight.w900))),

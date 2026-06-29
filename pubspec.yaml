@@ -18,9 +18,9 @@ dependencies:
   # OpenAI
   http: ^1.2.0
   # Other
-  camera: 0.10.9+1
+  camera: ^0.11.0+2
   shared_preferences: ^2.3.2
-  flutter_tts: ^4.2.0
+  flutter_tts: ^4.2.2
   tflite_flutter: ^0.10.4
 
 dev_dependencies:

@@ -1,28 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
+import 'firestore_service.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  ProfileScreen({super.key});
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String _name     = 'Nattaya K.';
-  String _city     = 'Bangkok';
+  String _name     = '';
+  String _city     = '';
   String _language = 'English (US)';
-  int _wordsSaved  = 48;
-  int _totalXp     = 2340;
-  int _level       = 12;
+  int _wordsSaved  = 0;
+  int _totalXp     = 0;
+  int _level       = 1;
   int _xpToNext    = 3000;
   bool _autoTts    = true;
-
-  // Weekly streak: which days are completed (Mon=0 … Sun=6)
-  final List<bool> _streak = [true, true, true, true, true, true, false];
-  final List<String> _dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  bool _dailyReminder  = true;
+  bool _reviewReminder = true;
+  bool _loading    = true;
 
   @override
   void initState() {
@@ -31,16 +31,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _name     = prefs.getString('profile_name')     ?? 'Nattaya K.';
-      _city     = prefs.getString('profile_city')     ?? 'Bangkok';
-      _language = prefs.getString('profile_language') ?? 'English (US)';
-      _wordsSaved = prefs.getInt('words_saved')       ?? 48;
-      _totalXp    = prefs.getInt('total_xp')          ?? 2340;
-      _level      = prefs.getInt('level')             ?? 12;
-      _autoTts    = prefs.getBool('auto_tts')         ?? true;
-    });
+    try {
+      final data = await FirestoreService.getProfileOrDefault();
+      if (!mounted) return;
+      setState(() {
+        _name            = data['name'] ?? 'User';
+        _city            = data['city'] ?? '';
+        _language        = data['language'] ?? 'English (US)';
+        _wordsSaved      = data['words_saved'] ?? 0;
+        _totalXp         = data['total_xp'] ?? 0;
+        _level           = data['level'] ?? 1;
+        _autoTts         = data['auto_tts'] ?? true;
+        _dailyReminder   = data['daily_reminder'] ?? true;
+        _reviewReminder  = data['review_reminder'] ?? true;
+        _loading         = false;
+      });
+    } catch (e) {
+      debugPrint('ProfileScreen load error: $e');
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _openEdit() async {
@@ -49,6 +58,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
       MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
     if (result == true) _loadProfile();
+  }
+
+  Future<void> _signOut() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sign out',
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700)),
+        content: const Text('Are you sure you want to sign out?',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sign out',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await FirebaseAuth.instance.signOut();
+    }
+  }
+
+  Future<void> _deleteAllData() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete all data',
+            style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.w700)),
+        content: const Text(
+            'This will permanently erase everything. This cannot be undone.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await FirestoreService.deleteAllData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('All data deleted.')),
+          );
+          _loadProfile();
+        }
+      } catch (e) {
+        debugPrint('Delete all data error: $e');
+      }
+    }
   }
 
   String get _levelLabel {
@@ -62,7 +145,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
-    final xpProgress = _totalXp / _xpToNext;
+
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: AppColors.bg(dark),
+        body: const Center(
+            child: CircularProgressIndicator(color: AppColors.cyan)),
+      );
+    }
+
+    final xpProgress =
+        _xpToNext == 0 ? 0.0 : _totalXp / _xpToNext;
     final xpLeft = _xpToNext - _totalXp;
 
     return Scaffold(
@@ -74,7 +167,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
-              // ── Avatar + name ────────────────────────────────────────────
+              // ── Avatar + name ────────────────────────────────────────
               Center(
                 child: Column(
                   children: [
@@ -82,26 +175,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: 88, height: 88,
+                          width: 88,
+                          height: 88,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.cyan.withOpacity(0.2),
-                            border: Border.all(color: AppColors.cyan, width: 2.5),
+                            color: AppColors.cyan.withValues(alpha: 0.2),
+                            border: Border.all(
+                                color: AppColors.cyan, width: 2.5),
                           ),
                           child: Center(
                             child: Text(
-                              _name.isNotEmpty ? _name[0].toUpperCase() : 'N',
+                              _name.isNotEmpty
+                                  ? _name[0].toUpperCase()
+                                  : 'U',
                               style: const TextStyle(
-                                  fontSize: 38, fontWeight: FontWeight.w800,
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.w800,
                                   color: AppColors.cyan),
                             ),
                           ),
                         ),
                         Positioned(
-                          bottom: -4, left: 0, right: 0,
+                          bottom: -4,
+                          left: 0,
+                          right: 0,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 3),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFFB300),
                                 borderRadius: BorderRadius.circular(20),
@@ -117,15 +218,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    Text(_name,
+                    Text(_name.isNotEmpty ? _name : 'User',
                         style: TextStyle(
                             color: AppColors.textPrimary(dark),
                             fontSize: 22,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
-                    Text('Learning $_language  ·  $_city',
-                        style: TextStyle(
-                            color: AppColors.textSecondary(dark), fontSize: 13)),
+                    Text(
+                      _city.isNotEmpty
+                          ? 'Learning $_language  ·  $_city'
+                          : 'Learning $_language',
+                      style: TextStyle(
+                          color: AppColors.textSecondary(dark),
+                          fontSize: 13),
+                    ),
                     const SizedBox(height: 14),
                     GestureDetector(
                       onTap: _openEdit,
@@ -151,7 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 28),
 
-              // ── Stats row ────────────────────────────────────────────────
+              // ── Stats row ────────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 decoration: BoxDecoration(
@@ -162,24 +268,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Row(
                   children: [
-                    _StatItem(value: '$_wordsSaved', label: 'Words saved', dark: dark),
+                    _StatItem(
+                        value: '$_wordsSaved',
+                        label: 'Words saved',
+                        dark: dark),
                     _Divider(dark: dark),
-                    _StatItem(value: '$_level', label: 'Level', dark: dark),
+                    _StatItem(
+                        value: '$_level',
+                        label: 'Level',
+                        dark: dark),
                     _Divider(dark: dark),
-                    _StatItem(value: '$_totalXp', label: 'Total XP', dark: dark),
+                    _StatItem(
+                        value: '$_totalXp',
+                        label: 'Total XP',
+                        dark: dark),
                   ],
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // ── XP Progress ──────────────────────────────────────────────
+              // ── XP Progress ──────────────────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Level $_level – $_levelLabel',
                       style: TextStyle(
-                          color: AppColors.textSecondary(dark), fontSize: 13)),
+                          color: AppColors.textSecondary(dark),
+                          fontSize: 13)),
                   Text('$_totalXp / $_xpToNext XP',
                       style: const TextStyle(
                           color: Color(0xFFFFB300),
@@ -194,62 +310,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   value: xpProgress.clamp(0.0, 1.0),
                   minHeight: 8,
                   backgroundColor: AppColors.secondary(dark),
-                  valueColor: const AlwaysStoppedAnimation(Color(0xFFFFB300)),
+                  valueColor: const AlwaysStoppedAnimation(
+                      Color(0xFFFFB300)),
                 ),
               ),
               const SizedBox(height: 6),
-              Text('$xpLeft XP to level ${_level + 1}',
+              Text(
+                  '${xpLeft < 0 ? 0 : xpLeft} XP to level ${_level + 1}',
                   style: TextStyle(
-                      color: AppColors.textSecondary(dark), fontSize: 12)),
-
-              const SizedBox(height: 24),
-
-              // ── Weekly Streak ────────────────────────────────────────────
-              Text('WEEKLY STREAK',
-                  style: TextStyle(
-                      color: AppColors.cyan,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2)),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(7, (i) {
-                  final done = _streak[i];
-                  return Column(
-                    children: [
-                      Container(
-                        width: 38, height: 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: done
-                              ? AppColors.cyan.withOpacity(0.15)
-                              : Colors.transparent,
-                          border: Border.all(
-                            color: done ? AppColors.cyan : AppColors.border(dark),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(_dayLabels[i],
-                              style: TextStyle(
-                                  color: done
-                                      ? AppColors.cyan
-                                      : AppColors.textSecondary(dark),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700)),
-                        ),
-                      ),
-                    ],
-                  );
-                }),
-              ),
+                      color: AppColors.textSecondary(dark),
+                      fontSize: 12)),
 
               const SizedBox(height: 28),
               Divider(color: AppColors.border(dark)),
               const SizedBox(height: 8),
 
-              // ── LEARNING section ─────────────────────────────────────────
+              // ── LEARNING section ─────────────────────────────────────
               Text('LEARNING',
                   style: TextStyle(
                       color: AppColors.cyan,
@@ -279,7 +355,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 iconColor: const Color(0xFF4CAF50),
                 icon: Icons.save_rounded,
                 title: 'Saved words',
-                subtitle: '3 days ago',
+                subtitle: '$_wordsSaved words',
                 dark: dark,
               ),
               _SettingsRow(
@@ -287,7 +363,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 iconColor: const Color(0xFFFFB300),
                 icon: Icons.star_rounded,
                 title: 'Daily word goal',
-                subtitle: '10 words / day',
+                subtitle: '$_wordGoal words / day',
                 dark: dark,
               ),
               _SettingsRow(
@@ -302,8 +378,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   activeColor: AppColors.cyan,
                   onChanged: (v) async {
                     setState(() => _autoTts = v);
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool('auto_tts', v);
+                    try {
+                      await FirestoreService.updateProfile(
+                          {'auto_tts': v});
+                    } catch (e) {
+                      debugPrint('auto_tts update error: $e');
+                    }
                   },
                 ),
               ),
@@ -312,7 +392,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Divider(color: AppColors.border(dark)),
               const SizedBox(height: 8),
 
-              // ── APP section ──────────────────────────────────────────────
+              // ── APP section ──────────────────────────────────────────
               Text('APP',
                   style: TextStyle(
                       color: AppColors.cyan,
@@ -331,7 +411,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 trailing: Switch(
                   value: dark,
                   activeColor: AppColors.cyan,
-                  onChanged: (_) => ThemeProvider.of(context).toggle(),
+                  onChanged: (_) =>
+                      ThemeProvider.of(context).toggle(),
                 ),
               ),
               _SettingsRow(
@@ -359,21 +440,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 dark: dark,
                 trailing: Text('Latest',
                     style: TextStyle(
-                        color: AppColors.textSecondary(dark), fontSize: 12)),
+                        color: AppColors.textSecondary(dark),
+                        fontSize: 12)),
               ),
+
+              const SizedBox(height: 8),
+              Divider(color: AppColors.border(dark)),
+              const SizedBox(height: 8),
+
+              // ── NOTIFICATIONS section ────────────────────────────────
+              Text('NOTIFICATIONS',
+                  style: TextStyle(
+                      color: AppColors.cyan,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2)),
+              const SizedBox(height: 8),
+
+              _SettingsRow(
+                iconBg: const Color(0xFF3A2D00),
+                iconColor: const Color(0xFFFFB300),
+                icon: Icons.notifications_rounded,
+                title: 'Daily reminder',
+                subtitle: '8:00 PM every day',
+                dark: dark,
+                trailing: Switch(
+                  value: _dailyReminder,
+                  activeColor: AppColors.cyan,
+                  onChanged: (v) async {
+                    setState(() => _dailyReminder = v);
+                    try {
+                      await FirestoreService.updateProfile(
+                          {'daily_reminder': v});
+                    } catch (e) {
+                      debugPrint('daily_reminder update error: $e');
+                    }
+                  },
+                ),
+              ),
+              _SettingsRow(
+                iconBg: const Color(0xFF0D3A1A),
+                iconColor: const Color(0xFF4CAF50),
+                icon: Icons.refresh_rounded,
+                title: 'Review reminders',
+                subtitle: 'Weekly · monthly',
+                dark: dark,
+                trailing: Switch(
+                  value: _reviewReminder,
+                  activeColor: AppColors.cyan,
+                  onChanged: (v) async {
+                    setState(() => _reviewReminder = v);
+                    try {
+                      await FirestoreService.updateProfile(
+                          {'review_reminder': v});
+                    } catch (e) {
+                      debugPrint('review_reminder update error: $e');
+                    }
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Delete all data ──────────────────────────────────────
+              GestureDetector(
+                onTap: _deleteAllData,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text('Delete all data',
+                          style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600)),
+                      SizedBox(height: 2),
+                      Text('Permanently erase everything',
+                          style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Sign out ─────────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _signOut,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                        color: Colors.redAccent, width: 1.5),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Sign out',
+                      style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ),
+
+              const SizedBox(height: 16),
             ],
           ),
         ),
       ),
     );
   }
+
+  int get _wordGoal => 10;
 }
 
-// ── Stat Item ─────────────────────────────────────────────────────────────────
+// ── Stat Item ──────────────────────────────────────────────────────────────────
 class _StatItem extends StatelessWidget {
   final String value, label;
   final bool dark;
-  const _StatItem({required this.value, required this.label, required this.dark});
+  const _StatItem(
+      {required this.value,
+      required this.label,
+      required this.dark});
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +581,8 @@ class _StatItem extends StatelessWidget {
           const SizedBox(height: 4),
           Text(label,
               style: TextStyle(
-                  color: AppColors.textSecondary(dark), fontSize: 12)),
+                  color: AppColors.textSecondary(dark),
+                  fontSize: 12)),
         ],
       ),
     );
@@ -400,11 +594,12 @@ class _Divider extends StatelessWidget {
   const _Divider({required this.dark});
   @override
   Widget build(BuildContext context) {
-    return Container(width: 1, height: 40, color: AppColors.border(dark));
+    return Container(
+        width: 1, height: 40, color: AppColors.border(dark));
   }
 }
 
-// ── Settings Row ──────────────────────────────────────────────────────────────
+// ── Settings Row ───────────────────────────────────────────────────────────────
 class _SettingsRow extends StatelessWidget {
   final Color iconBg, iconColor;
   final IconData icon;
@@ -434,7 +629,8 @@ class _SettingsRow extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 40, height: 40,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: iconBg,
                 borderRadius: BorderRadius.circular(10),
@@ -459,9 +655,11 @@ class _SettingsRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) trailing!
-            else Icon(Icons.chevron_right_rounded,
-                color: AppColors.textSecondary(dark), size: 20),
+            if (trailing != null)
+              trailing!
+            else
+              Icon(Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary(dark), size: 20),
           ],
         ),
       ),

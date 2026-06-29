@@ -2,8 +2,8 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")  // moved here, no more apply()
 }
-apply(plugin = "com.google.gms.google-services")
 
 android {
     namespace = "com.example.ar_language_app"
@@ -16,7 +16,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -41,4 +41,5 @@ flutter {
 dependencies {
     implementation("androidx.concurrent:concurrent-futures:1.2.0")
     implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
 }

@@ -198,7 +198,7 @@ class _WordCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: needsReview
-            ? Colors.redAccent.withOpacity(0.4)
+            ? Colors.redAccent.withValues(alpha: 0.4)
             : AppColors.border(dark)),
         boxShadow: [BoxShadow(color: AppColors.shadow(dark), blurRadius: 4)],
       ),
@@ -232,7 +232,7 @@ class _WordCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.flame.withOpacity(0.15),
+              color: AppColors.flame.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Text('🔥', style: TextStyle(fontSize: 14)),

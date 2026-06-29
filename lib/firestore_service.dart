@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class FirestoreService {
   static final _db = FirebaseFirestore.instance;
@@ -22,6 +23,7 @@ class FirestoreService {
     await _db.collection('users').doc(_uid).update({
       'words_saved': FieldValue.increment(1),
       'total_xp': FieldValue.increment(10),
+      'words_today': FieldValue.increment(1),
     });
   }
 
@@ -50,10 +52,13 @@ class FirestoreService {
         .doc(_uid)
         .collection('saved_words')
         .doc(word.toLowerCase())
-        .update({'status': status, 'times_reviewed': FieldValue.increment(1)});
+        .update({
+      'status': status,
+      'times_reviewed': FieldValue.increment(1),
+    });
   }
 
-  // ── Chat History ──────────────────────────────────────────────────────────
+  // ── Chat History ───────────────────────────────────────────────────────────
   static Future<void> saveChatMessage({
     required String role,
     required String content,
@@ -69,7 +74,8 @@ class FirestoreService {
     });
   }
 
-  static Future<List<Map<String, String>>> getChatHistory({int limit = 20}) async {
+  static Future<List<Map<String, String>>> getChatHistory(
+      {int limit = 20}) async {
     final snap = await _db
         .collection('users')
         .doc(_uid)
@@ -98,10 +104,20 @@ class FirestoreService {
     }
   }
 
-  // ── User Profile ──────────────────────────────────────────────────────────
+  // ── User Profile ───────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getProfile() async {
     final doc = await _db.collection('users').doc(_uid).get();
     return doc.data();
+  }
+
+  static Future<Map<String, dynamic>> getProfileOrDefault() async {
+    try {
+      final data = await getProfile();
+      return data ?? {};
+    } catch (e) {
+      debugPrint('getProfileOrDefault error: $e');
+      return {};
+    }
   }
 
   static Future<void> updateProfile(Map<String, dynamic> data) async {
@@ -120,41 +136,44 @@ class FirestoreService {
       'level': 1,
       'total_xp': 0,
       'words_saved': 0,
-      'streak_days': 0,
+      'words_today': 0,
       'auto_tts': true,
       'words_goal': 10,
+      'daily_reminder': true,
+      'review_reminder': true,
       'created_at': FieldValue.serverTimestamp(),
     });
   }
 
-  // ── Streak ────────────────────────────────────────────────────────────────
-  static Future<void> markTodayActive() async {
-    final today = DateTime.now().toIso8601String().substring(0, 10);
-    await _db
-        .collection('users')
-        .doc(_uid)
-        .collection('streak')
-        .doc(today)
-        .set({'date': today, 'completed': true});
-  }
+  // ── Delete All Data ────────────────────────────────────────────────────────
+  static Future<void> deleteAllData() async {
+    final uid = _uid;
 
-  static Future<List<bool>> getWeeklyStreak() async {
-    final now = DateTime.now();
-    final results = <bool>[];
-    for (int i = 6; i >= 0; i--) {
-      final day = now.subtract(Duration(days: i));
-      final key = day.toIso8601String().substring(0, 10);
-      final doc = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('streak')
-          .doc(key)
-          .get();
-      results.add(doc.exists);
+    final wordsSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('saved_words')
+        .get();
+    for (final doc in wordsSnap.docs) {
+      await doc.reference.delete();
     }
-    return results;
+
+    final chatSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_history')
+        .get();
+    for (final doc in chatSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    await _db.collection('users').doc(uid).set({
+      'words_saved': 0,
+      'total_xp': 0,
+      'words_today': 0,
+      'level': 1,
+    }, SetOptions(merge: true));
   }
 }
 
-// Alias — all screens can use DatabaseService.x or FirestoreService.x
 typedef DatabaseService = FirestoreService;

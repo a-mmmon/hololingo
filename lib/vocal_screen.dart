@@ -135,7 +135,7 @@ class _VocalScreenState extends State<VocalScreen> {
                         activeTrackColor: AppColors.cyan,
                         inactiveTrackColor: AppColors.bg(dark),
                         thumbColor: AppColors.cyan,
-                        overlayColor: AppColors.cyan.withOpacity(0.2),
+                        overlayColor: AppColors.cyan.withValues(alpha: 0.2),
                       ),
                       child: Slider(
                         value: _speechRate,
@@ -181,7 +181,7 @@ class _VocalScreenState extends State<VocalScreen> {
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: isSpeaking
-                                    ? AppColors.cyan.withOpacity(0.1)
+                                    ? AppColors.cyan.withValues(alpha: 0.1)
                                     : AppColors.card(dark),
                                 borderRadius: BorderRadius.circular(16),
                                 border: isSpeaking
@@ -236,7 +236,7 @@ class _VocalScreenState extends State<VocalScreen> {
                                     child: Container(
                                       width: 48, height: 48,
                                       decoration: BoxDecoration(
-                                        color: isSpeaking ? AppColors.cyan : AppColors.cyan.withOpacity(0.15),
+                                        color: isSpeaking ? AppColors.cyan : AppColors.cyan.withValues(alpha: 0.15),
                                         shape: BoxShape.circle,
                                         border: Border.all(color: AppColors.cyan, width: 1.5),
                                       ),
