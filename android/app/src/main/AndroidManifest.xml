@@ -1,4 +1,8 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.ar" android:required="true" />
+
     <application
         android:label="ar_language_app"
         android:name="${applicationName}"
@@ -30,6 +34,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Tells Google Play Services this app uses ARCore. "required" means
+             the Play Store will only show/allow install on ARCore-supported
+             devices. Use "optional" instead if you want the app installable
+             on devices without ARCore, with AR simply unavailable there. -->
+        <meta-data
+    android:name="com.google.ar.core"
+    android:value="required"
+    tools:replace="android:value" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -41,5 +53,8 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Needed so the ARCore SDK can check whether Google Play Services
+             for AR is installed / prompt to install it if missing. -->
+        <package android:name="com.google.ar.core" />
     </queries>
 </manifest>

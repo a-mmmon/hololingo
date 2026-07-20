@@ -9,6 +9,8 @@ import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'review_screen.dart';
 import 'gobot_screen.dart';
+import 'topics_screen.dart';
+import 'ar_anchor_screen.dart';
 import 'auth/auth_gate.dart';
 import 'dictionary_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -103,6 +105,17 @@ class TabSwitcher extends InheritedWidget {
   bool updateShouldNotify(TabSwitcher old) => false;
 }
 
+// ── Tab index constants ─────────────────────────────────────────────────────
+// Keep these in sync with _AppBottomNav's items list below.
+class AppTab {
+  static const home = 0;
+  static const scan = 1;
+  static const review = 2;
+  static const topics = 3;
+  static const gobot = 4;
+  static const profile = 5;
+}
+
 // ── App Shell ──────────────────────────────────────────────────────────────────
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -111,7 +124,7 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  int _currentIndex = 0;
+  int _currentIndex = AppTab.home;
 
   void _switchTab(int index) => setState(() => _currentIndex = index);
 
@@ -120,16 +133,17 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildTab(int index) {
     // Profile: never cache — always rebuild fresh so data reloads
-    if (index == 4) return ProfileScreen();
+    if (index == AppTab.profile) return ProfileScreen();
 
     // Camera: never cache — so it doesn't bleed through other tabs
-    if (index == 1) return const CameraTab();
+    if (index == AppTab.scan) return const CameraTab();
 
     if (!_tabCache.containsKey(index)) {
       _tabCache[index] = switch (index) {
-        0 => const HomeScreen(),
-        2 => const ReviewScreen(),
-        3 => const GobotScreen(),
+        AppTab.home => const HomeScreen(),
+        AppTab.review => const ReviewScreen(),
+        AppTab.topics => const TopicsScreen(),
+        AppTab.gobot => const GobotScreen(),
         _ => const SizedBox.shrink(),
       };
     }
@@ -145,7 +159,7 @@ class _AppShellState extends State<AppShell> {
         backgroundColor: AppColors.bg(dark),
         body: IndexedStack(
           index: _currentIndex,
-          children: List.generate(5, (i) => _buildTab(i)),
+          children: List.generate(6, (i) => _buildTab(i)),
         ),
         bottomNavigationBar: _AppBottomNav(
           currentIndex: _currentIndex,
@@ -165,10 +179,12 @@ class _AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
+    // Order must match AppTab constants: home, scan, review, topics, gobot, profile
     final items = [
       _NavItem(icon: Icons.home_rounded, label: 'Home'),
       _NavItem(icon: Icons.qr_code_scanner_rounded, label: 'Scan'),
       _NavItem(icon: Icons.auto_stories_rounded, label: 'Review'),
+      _NavItem(icon: Icons.map_rounded, label: 'Topics'),
       _NavItem(isGobot: true, label: 'Gobot'),
       _NavItem(icon: Icons.person_rounded, label: 'Profile'),
     ];
@@ -485,6 +501,13 @@ class _CameraTabState extends State<CameraTab> {
               },
               onQuiz: () => Navigator.push(context,
                   MaterialPageRoute(builder: (_) => const QuizScreen())),
+              onPlaceAr: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => ArAnchorScreen(
+                        word: _detectedWord,
+                        phonetic: _phonetic,
+                        definition: _definition,
+                        example: _example,
+                      ))),
             )),
       if (!_showOverlay)
         Positioned(
@@ -548,7 +571,7 @@ class _CornerPainter extends CustomPainter {
 class _WordPanel extends StatelessWidget {
   final String word, phonetic, partOfSpeech, definition, example;
   final bool isLoading, isDark;
-  final VoidCallback onClose, onListen, onSave, onQuiz;
+  final VoidCallback onClose, onListen, onSave, onQuiz, onPlaceAr;
   const _WordPanel(
       {required this.word,
       required this.phonetic,
@@ -560,7 +583,8 @@ class _WordPanel extends StatelessWidget {
       required this.onClose,
       required this.onListen,
       required this.onSave,
-      required this.onQuiz});
+      required this.onQuiz,
+      required this.onPlaceAr});
 
   @override
   Widget build(BuildContext context) {
@@ -681,6 +705,15 @@ class _WordPanel extends StatelessWidget {
                         onTap: onQuiz,
                         isDark: isDark),
                   ]),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _ActionBtn(
+                        icon: Icons.view_in_ar_rounded,
+                        label: 'Place in AR',
+                        onTap: onPlaceAr,
+                        isDark: isDark),
+                  ),
                 ]),
     );
   }

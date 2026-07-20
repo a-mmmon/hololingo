@@ -135,6 +135,7 @@ class FirestoreService {
       'language': 'English (US)',
       'level': 1,
       'total_xp': 0,
+      'tokens': 0,
       'words_saved': 0,
       'words_today': 0,
       'auto_tts': true,
@@ -143,6 +144,39 @@ class FirestoreService {
       'review_reminder': true,
       'created_at': FieldValue.serverTimestamp(),
     });
+  }
+
+  // ── Topic Progress ────────────────────────────────────────────────────────
+  // Returns a map like { 'colors': ['Red', 'Blue'], 'animals': ['Cat'] }
+  // — one entry per topic, listing which words have been learned.
+  static Future<Map<String, dynamic>> getTopicProgress() async {
+    final doc = await _db
+        .collection('users')
+        .doc(_uid)
+        .collection('progress')
+        .doc('topics')
+        .get();
+    return doc.data() ?? {};
+  }
+
+  // Marks a single word as learned within a topic.
+  static Future<void> markWordLearned(String topicId, String word) async {
+    await _db
+        .collection('users')
+        .doc(_uid)
+        .collection('progress')
+        .doc('topics')
+        .set({
+      topicId: FieldValue.arrayUnion([word]),
+    }, SetOptions(merge: true));
+  }
+
+  // Grants Tokens + XP rewards (e.g. on topic completion).
+  static Future<void> addRewards({required int tokens, required int xp}) async {
+    await _db.collection('users').doc(_uid).set({
+      'tokens': FieldValue.increment(tokens),
+      'total_xp': FieldValue.increment(xp),
+    }, SetOptions(merge: true));
   }
 
   // ── Delete All Data ────────────────────────────────────────────────────────
@@ -167,11 +201,32 @@ class FirestoreService {
       await doc.reference.delete();
     }
 
+    final streakSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('streak')
+        .get();
+    for (final doc in streakSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    final topicsSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('progress')
+        .doc('topics')
+        .get();
+    if (topicsSnap.exists) {
+      await topicsSnap.reference.delete();
+    }
+
     await _db.collection('users').doc(uid).set({
       'words_saved': 0,
       'total_xp': 0,
+      'tokens': 0,
       'words_today': 0,
       'level': 1,
+      'streak_days': 0,
     }, SetOptions(merge: true));
   }
 }
