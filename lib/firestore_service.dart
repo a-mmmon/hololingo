@@ -146,6 +146,20 @@ class FirestoreService {
     });
   }
 
+  // ── Friends ────────────────────────────────────────────────────────────────
+  static Future<List<Map<String, dynamic>>> getFriends() async {
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('friends')
+          .get();
+      return snap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
   // ── Topic Progress ────────────────────────────────────────────────────────
   // Returns a map like { 'colors': ['Red', 'Blue'], 'animals': ['Cat'] }
   // — one entry per topic, listing which words have been learned.
@@ -169,6 +183,23 @@ class FirestoreService {
         .set({
       topicId: FieldValue.arrayUnion([word]),
     }, SetOptions(merge: true));
+  }
+
+  // Saves per-topic word-completion count and grants 100 XP.
+  static Future<void> saveTopicProgress(
+      String topicId, int wordsCompleted) async {
+    await _db
+        .collection('users')
+        .doc(_uid)
+        .collection('topic_progress')
+        .doc(topicId)
+        .set({
+      'words_completed': wordsCompleted,
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    await _db.collection('users').doc(_uid).update({
+      'total_xp': FieldValue.increment(100),
+    });
   }
 
   // Grants Tokens + XP rewards (e.g. on topic completion).

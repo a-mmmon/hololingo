@@ -14,16 +14,33 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _recentWords = [];
   bool _loading = true;
 
-  static const int _wordsToday = 4;
-  static const int _wordGoal = 10;
-  static const int _totalXp = 2340;
+  String _name = '';
+  int _wordsToday = 0;
+  int _wordGoal = 10;
+  int _totalXp = 0;
   static const int _xpThisWeek = 120;
   static const int _dayStreak = 7;
 
   @override
   void initState() {
     super.initState();
+    _loadProfile();
     _loadRecent();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final data = await DatabaseService.getProfileOrDefault();
+      if (!mounted) return;
+      setState(() {
+        _name = data['name'] ?? '';
+        _totalXp = data['total_xp'] ?? 0;
+        _wordGoal = data['words_goal'] ?? 10;
+        _wordsToday = data['words_today'] ?? 0;
+      });
+    } catch (e) {
+      debugPrint('HomeScreen profile error: $e');
+    }
   }
 
   Future<void> _loadRecent() async {
@@ -74,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text('Good morning,',
                           style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 14)),
-                      Text('Nattaya',
+                      Text(_name.isNotEmpty ? _name : 'there',
                           style: TextStyle(
                               color: AppColors.textPrimary(dark),
                               fontSize: 28,
@@ -110,9 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         border: Border.all(color: AppColors.cyan, width: 2),
                         color: AppColors.card(dark),
                       ),
-                      child: const Center(
-                        child: Text('N',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.cyan)),
+                      child: Center(
+                        child: Text(
+                            _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.cyan)),
                       ),
                     ),
                   ),
@@ -152,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(3),
                             child: LinearProgressIndicator(
-                              value: _wordsToday / _wordGoal,
+                              value: _wordGoal == 0 ? 0 : _wordsToday / _wordGoal,
                               backgroundColor: AppColors.bg(dark),
                               valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyan),
                               minHeight: 4,

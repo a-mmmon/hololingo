@@ -28,10 +28,17 @@ class _SignupScreenState extends State<SignupScreen> {
         password: _passCtrl.text.trim(),
       );
       await cred.user?.updateDisplayName(_nameCtrl.text.trim());
-      await FirestoreService.createUserProfile(
-        name: _nameCtrl.text.trim(),
-        email: _emailCtrl.text.trim(),
-      );
+
+      try {
+        await FirestoreService.createUserProfile(
+          name: _nameCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+        );
+        debugPrint('Profile created for ${cred.user?.uid}');
+      } catch (e) {
+        debugPrint('Profile creation failed: $e');
+        // Still let them in
+      }
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message);
     } finally {
