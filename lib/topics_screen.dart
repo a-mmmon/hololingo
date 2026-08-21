@@ -361,19 +361,15 @@ class _PathPainter extends CustomPainter {
 }
 
 // ── Stylized map illustration backdrop ───────────────────────────────────
-// Soft blocky "streets + parks + water" look, like a simplified travel map —
-// not a real map tile, just a painted illustration.
 class _MapBackdropPainter extends CustomPainter {
   final bool dark;
   const _MapBackdropPainter({required this.dark});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Base map color (light, like the mockup — map illustrations read best light)
     final base = Paint()..color = const Color(0xFFE4E9F0);
     canvas.drawRect(Offset.zero & size, base);
 
-    // Parks
     final green = Paint()..color = const Color(0xFFB9DCC0);
     canvas.drawOval(Rect.fromCenter(
         center: Offset(size.width * 0.18, size.height * 0.30),
@@ -382,7 +378,6 @@ class _MapBackdropPainter extends CustomPainter {
         center: Offset(size.width * 0.85, size.height * 0.5),
         width: size.width * 0.28, height: size.height * 0.16), green);
 
-    // Water
     final water = Paint()..color = const Color(0xFFAFCBE8);
     canvas.drawOval(Rect.fromCenter(
         center: Offset(size.width * 0.75, size.height * 0.85),
@@ -391,7 +386,6 @@ class _MapBackdropPainter extends CustomPainter {
         center: Offset(size.width * 0.15, size.height * 0.75),
         width: size.width * 0.22, height: size.height * 0.14), water);
 
-    // Faint street grid
     final street = Paint()
       ..color = Colors.white.withValues(alpha: 0.7)
       ..strokeWidth = 2;
