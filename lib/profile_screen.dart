@@ -11,14 +11,14 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String _name     = 'Nattaya K.';
-  String _city     = 'Bangkok';
+  String _name = 'Nattaya K.';
+  String _city = 'Bangkok';
   String _language = 'English (US)';
-  int _wordsSaved  = 48;
-  int _totalXp     = 2340;
-  int _level       = 12;
-  int _xpToNext    = 3000;
-  bool _autoTts    = true;
+  int _wordsSaved = 48;
+  int _totalXp = 2340;
+  int _level = 12;
+  int _xpToNext = 3000;
+  bool _autoTts = true;
 
   // Weekly streak: which days are completed (Mon=0 … Sun=6)
   final List<bool> _streak = [true, true, true, true, true, true, false];
@@ -33,13 +33,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _name     = prefs.getString('profile_name')     ?? 'Nattaya K.';
-      _city     = prefs.getString('profile_city')     ?? 'Bangkok';
+      _name = prefs.getString('profile_name') ?? 'Nattaya K.';
+      _city = prefs.getString('profile_city') ?? 'Bangkok';
       _language = prefs.getString('profile_language') ?? 'English (US)';
-      _wordsSaved = prefs.getInt('words_saved')       ?? 48;
-      _totalXp    = prefs.getInt('total_xp')          ?? 2340;
-      _level      = prefs.getInt('level')             ?? 12;
-      _autoTts    = prefs.getBool('auto_tts')         ?? true;
+      _wordsSaved = prefs.getInt('words_saved') ?? 48;
+      _totalXp = prefs.getInt('total_xp') ?? 2340;
+      _level = prefs.getInt('level') ?? 12;
+      _autoTts = prefs.getBool('auto_tts') ?? true;
     });
   }
 
@@ -52,7 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String get _levelLabel {
-    if (_level < 5)  return 'Beginner';
+    if (_level < 5) return 'Beginner';
     if (_level < 10) return 'Elementary';
     if (_level < 15) return 'Intermediate';
     if (_level < 20) return 'Advanced';
@@ -73,7 +73,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
               // ── Avatar + name ────────────────────────────────────────────
               Center(
                 child: Column(
@@ -82,26 +81,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: 88, height: 88,
+                          width: 88,
+                          height: 88,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: AppColors.cyan.withOpacity(0.2),
-                            border: Border.all(color: AppColors.cyan, width: 2.5),
+                            border:
+                                Border.all(color: AppColors.cyan, width: 2.5),
                           ),
                           child: Center(
                             child: Text(
                               _name.isNotEmpty ? _name[0].toUpperCase() : 'N',
                               style: const TextStyle(
-                                  fontSize: 38, fontWeight: FontWeight.w800,
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.w800,
                                   color: AppColors.cyan),
                             ),
                           ),
                         ),
                         Positioned(
-                          bottom: -4, left: 0, right: 0,
+                          bottom: -4,
+                          left: 0,
+                          right: 0,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 3),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFFB300),
                                 borderRadius: BorderRadius.circular(20),
@@ -125,7 +130,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 4),
                     Text('Learning $_language  ·  $_city',
                         style: TextStyle(
-                            color: AppColors.textSecondary(dark), fontSize: 13)),
+                            color: AppColors.textSecondary(dark),
+                            fontSize: 13)),
                     const SizedBox(height: 14),
                     GestureDetector(
                       onTap: _openEdit,
@@ -162,11 +168,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Row(
                   children: [
-                    _StatItem(value: '$_wordsSaved', label: 'Words saved', dark: dark),
+                    _StatItem(
+                        value: '$_wordsSaved',
+                        label: 'Words saved',
+                        dark: dark),
                     _Divider(dark: dark),
                     _StatItem(value: '$_level', label: 'Level', dark: dark),
                     _Divider(dark: dark),
-                    _StatItem(value: '$_totalXp', label: 'Total XP', dark: dark),
+                    _StatItem(
+                        value: '$_totalXp', label: 'Total XP', dark: dark),
                   ],
                 ),
               ),
@@ -219,14 +229,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   return Column(
                     children: [
                       Container(
-                        width: 38, height: 38,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: done
                               ? AppColors.cyan.withOpacity(0.15)
                               : Colors.transparent,
                           border: Border.all(
-                            color: done ? AppColors.cyan : AppColors.border(dark),
+                            color:
+                                done ? AppColors.cyan : AppColors.border(dark),
                             width: 1.5,
                           ),
                         ),
@@ -373,7 +385,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 class _StatItem extends StatelessWidget {
   final String value, label;
   final bool dark;
-  const _StatItem({required this.value, required this.label, required this.dark});
+  const _StatItem(
+      {required this.value, required this.label, required this.dark});
 
   @override
   Widget build(BuildContext context) {
@@ -434,7 +447,8 @@ class _SettingsRow extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 40, height: 40,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: iconBg,
                 borderRadius: BorderRadius.circular(10),
@@ -459,9 +473,11 @@ class _SettingsRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) trailing!
-            else Icon(Icons.chevron_right_rounded,
-                color: AppColors.textSecondary(dark), size: 20),
+            if (trailing != null)
+              trailing!
+            else
+              Icon(Icons.chevron_right_rounded,
+                  color: AppColors.textSecondary(dark), size: 20),
           ],
         ),
       ),
