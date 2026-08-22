@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
 import 'firestore_service.dart';
 import 'edit_profile_screen.dart';
+import 'friends_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -21,6 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     try {
       final data = await FirestoreService.getProfileOrDefault();
+      final friends = await FirestoreService.getFriends();
       if (!mounted) return;
       setState(() {
         _name           = data['name'] ?? 'User';
@@ -33,8 +35,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _autoTts        = data['auto_tts'] ?? true;
         _dailyReminder  = data['daily_reminder'] ?? true;
         _reviewReminder = data['review_reminder'] ?? true;
-        // Friends count is a placeholder until the Friends feature is built.
-        _friends        = data['friends_count'] ?? 0;
+        _friends        = friends.length;
         _loading        = false;
       });
     } catch (e) {
@@ -46,6 +47,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _openEdit() async {
     final result = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
     if (result == true) _loadProfile();
+  }
+
+  // Tapping "X Friends" — shows just the friends list (+ pending requests),
+  // no search bar.
+  Future<void> _openFriendsList() async {
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const FriendsScreen(mode: FriendsScreenMode.friendsOnly),
+    ));
+    _loadProfile();
+  }
+
+  // Tapping the search icon — shows just the search bar, no friends list.
+  Future<void> _openSearch() async {
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const FriendsScreen(mode: FriendsScreenMode.searchOnly),
+    ));
+    _loadProfile();
   }
 
   Future<void> _signOut() async {
@@ -120,8 +138,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: AppColors.bg(dark),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+            // ── Top bar — search + edit icons ─────────────────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: _openSearch,
+                  icon: Icon(Icons.search_rounded, color: AppColors.textPrimary(dark)),
+                ),
+                IconButton(
+                  onPressed: _openEdit,
+                  icon: Icon(Icons.edit_outlined, color: AppColors.textPrimary(dark)),
+                ),
+              ],
+            ),
 
             // Avatar + name
             Center(
@@ -146,24 +179,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 18),
                 Text(_name.isNotEmpty ? _name : 'User',
                   style: TextStyle(color: AppColors.textPrimary(dark), fontSize: 22, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(_city.isNotEmpty ? 'Learning $_language  ·  $_city' : 'Learning $_language',
-                  style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13)),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 GestureDetector(
-                  onTap: _openEdit,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppColors.border(dark), width: 1.5)),
-                    child: Text('Edit profile', style: TextStyle(color: AppColors.textPrimary(dark), fontSize: 14, fontWeight: FontWeight.w600)))),
+                  onTap: _openFriendsList,
+                  child: Text('$_friends Friends',
+                    style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
               ]),
             ),
 
             const SizedBox(height: 28),
 
-            // ── Stats row — Tokens / Friends / Level / Total XP ────────────────
+            // ── Stats row — Tokens / Level / Total XP ────────────────
             Container(
               padding: const EdgeInsets.symmetric(vertical: 18),
               decoration: BoxDecoration(
@@ -172,8 +199,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   bottom: BorderSide(color: AppColors.border(dark)))),
               child: Row(children: [
                 _StatItem(value: '$_tokens', label: 'Tokens', dark: dark),
-                _Divider(dark: dark),
-                _StatItem(value: '$_friends', label: 'Friends', dark: dark),
                 _Divider(dark: dark),
                 _StatItem(value: '$_level', label: 'Level', dark: dark),
                 _Divider(dark: dark),
@@ -325,15 +350,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 class _StatItem extends StatelessWidget {
   final String value, label;
   final bool dark;
-  const _StatItem({required this.value, required this.label, required this.dark});
+  final VoidCallback? onTap;
+  const _StatItem({required this.value, required this.label, required this.dark, this.onTap});
 
   @override
   Widget build(BuildContext context) => Expanded(
-    child: Column(children: [
-      Text(value, style: TextStyle(color: AppColors.textPrimary(dark), fontSize: 22, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 4),
-      Text(label, style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 11), textAlign: TextAlign.center),
-    ]));
+    child: GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(children: [
+        Text(value, style: TextStyle(color: AppColors.textPrimary(dark), fontSize: 22, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 11), textAlign: TextAlign.center),
+      ])));
 }
 
 class _Divider extends StatelessWidget {

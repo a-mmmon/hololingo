@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'firestore_service.dart';
 import 'app_theme.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -14,6 +14,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _cityController = TextEditingController();
   String _selectedLanguage = 'English (US)';
   bool _isSaving = false;
+  bool _isLoading = true;
 
   final List<String> _languages = [
     'English (US)',
@@ -34,23 +35,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
+    final data = await DatabaseService.getProfileOrDefault();
+    if (!mounted) return;
     setState(() {
-      _nameController.text =
-          prefs.getString('profile_name') ?? 'Nattaya K.';
-      _cityController.text =
-          prefs.getString('profile_city') ?? 'Bangkok';
-      _selectedLanguage =
-          prefs.getString('profile_language') ?? 'English (US)';
+      _nameController.text = data['name'] ?? '';
+      _cityController.text = data['city'] ?? 'Bangkok';
+      _selectedLanguage = data['language'] ?? 'English (US)';
+      _isLoading = false;
     });
   }
 
   Future<void> _saveProfile() async {
     setState(() => _isSaving = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('profile_name', _nameController.text.trim());
-    await prefs.setString('profile_city', _cityController.text.trim());
-    await prefs.setString('profile_language', _selectedLanguage);
+    try {
+      await FirestoreService.updateProfile({
+        'name': _nameController.text.trim(),
+        'city': _cityController.text.trim(),
+        'language': _selectedLanguage,
+      });
+    } catch (e) {
+      debugPrint('Save profile error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => _isSaving = false);
+      return;
+    }
     setState(() => _isSaving = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,119 +138,125 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Avatar
-            Center(
-              child: Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.cyan, width: 2.5),
-                  color: AppColors.card(dark),
-                ),
-                child: Center(
-                  child: Text(
-                    _nameController.text.isNotEmpty
-                        ? _nameController.text[0].toUpperCase()
-                        : 'N',
-                    style: const TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.cyan),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.cyan))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar
+                  Center(
+                    child: Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: AppColors.cyan, width: 2.5),
+                        color: AppColors.card(dark),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _nameController.text.isNotEmpty
+                              ? _nameController.text[0].toUpperCase()
+                              : 'U',
+                          style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.cyan),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+
+                  const SizedBox(height: 32),
+
+                  _FieldLabel('Display Name', dark),
+                  const SizedBox(height: 8),
+                  _InputField(
+                    controller: _nameController,
+                    hint: 'Your name',
+                    icon: Icons.person_rounded,
+                    dark: dark,
+                    onChanged: (_) => setState(() {}),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  _FieldLabel('City', dark),
+                  const SizedBox(height: 8),
+                  _InputField(
+                    controller: _cityController,
+                    hint: 'Your city',
+                    icon: Icons.location_on_rounded,
+                    dark: dark,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  _FieldLabel('Target Language', dark),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.card(dark),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border(dark)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedLanguage,
+                        isExpanded: true,
+                        dropdownColor: AppColors.card(dark),
+                        icon: Icon(Icons.keyboard_arrow_down_rounded,
+                            color: AppColors.textSecondary(dark)),
+                        items: _languages
+                            .map((lang) => DropdownMenuItem(
+                                  value: lang,
+                                  child: Text(lang,
+                                      style: TextStyle(
+                                          color:
+                                              AppColors.textPrimary(dark),
+                                          fontSize: 15)),
+                                ))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => _selectedLanguage = v!),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _saveProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.cyan,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.black, strokeWidth: 2))
+                          : const Text('Save Changes',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16)),
+                    ),
+                  ),
+                ],
               ),
             ),
-
-            const SizedBox(height: 32),
-
-            _FieldLabel('Display Name', dark),
-            const SizedBox(height: 8),
-            _InputField(
-              controller: _nameController,
-              hint: 'Your name',
-              icon: Icons.person_rounded,
-              dark: dark,
-              onChanged: (_) => setState(() {}),
-            ),
-
-            const SizedBox(height: 20),
-
-            _FieldLabel('City', dark),
-            const SizedBox(height: 8),
-            _InputField(
-              controller: _cityController,
-              hint: 'Your city',
-              icon: Icons.location_on_rounded,
-              dark: dark,
-            ),
-
-            const SizedBox(height: 20),
-
-            _FieldLabel('Target Language', dark),
-            const SizedBox(height: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.card(dark),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border(dark)),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedLanguage,
-                  isExpanded: true,
-                  dropdownColor: AppColors.card(dark),
-                  icon: Icon(Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.textSecondary(dark)),
-                  items: _languages
-                      .map((lang) => DropdownMenuItem(
-                            value: lang,
-                            child: Text(lang,
-                                style: TextStyle(
-                                    color: AppColors.textPrimary(dark),
-                                    fontSize: 15)),
-                          ))
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => _selectedLanguage = v!),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.cyan,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                ),
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.black, strokeWidth: 2))
-                    : const Text('Save Changes',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
