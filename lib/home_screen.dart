@@ -21,11 +21,17 @@ class _HomeScreenState extends State<HomeScreen> {
   static const int _xpThisWeek = 120;
   static const int _dayStreak = 7;
 
+  // ── Event state (from shared config/current_event doc) ───────────────────
+  Map<String, dynamic>? _event;
+  bool _eventNotifyOn = false;
+  bool _eventLoading = true;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
     _loadRecent();
+    _loadEvent();
   }
 
   Future<void> _loadProfile() async {
@@ -38,6 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _wordGoal = data['words_goal'] ?? 10;
         _wordsToday = data['words_today'] ?? 0;
       });
+      // Re-check notify state now that we have the profile + (maybe) event.
+      _syncNotifyState(data);
     } catch (e) {
       debugPrint('HomeScreen profile error: $e');
     }
@@ -50,6 +58,39 @@ class _HomeScreenState extends State<HomeScreen> {
         _recentWords = words.take(5).toList();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadEvent() async {
+    final event = await DatabaseService.getCurrentEvent();
+    debugPrint('EVENT DEBUG: $event');
+    if (!mounted) return;
+    setState(() {
+      _event = event;
+      _eventLoading = false;
+    });
+    // Sync notify state against the (possibly new) event.
+    final profile = await DatabaseService.getProfileOrDefault();
+    _syncNotifyState(profile);
+  }
+
+  void _syncNotifyState(Map<String, dynamic> profile) {
+    if (!mounted || _event == null) return;
+    final eventName = _event!['name'] as String? ?? '';
+    setState(() {
+      _eventNotifyOn = DatabaseService.isNotifiedForEvent(profile, eventName);
+    });
+  }
+
+  Future<void> _toggleEventNotify() async {
+    if (_event == null) return;
+    final eventName = _event!['name'] as String? ?? '';
+    final newValue = !_eventNotifyOn;
+    setState(() => _eventNotifyOn = newValue);
+    try {
+      await DatabaseService.setEventNotify(eventName, newValue);
+    } catch (e) {
+      debugPrint('event_notify update error: $e');
     }
   }
 
@@ -71,9 +112,27 @@ class _HomeScreenState extends State<HomeScreen> {
     return statuses[index % statuses.length];
   }
 
+  String _formatEventDate(DateTime? d) {
+    if (d == null) return '';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d.day)}.${two(d.month)}.${d.year} ${two(d.hour)}:${two(d.minute)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
+
+    final eventName = _event?['name'] as String?;
+    final eventTimestamp = _event?['date'];
+    DateTime? eventDate;
+    if (eventTimestamp != null) {
+      try {
+        eventDate = (eventTimestamp as dynamic).toDate();
+      } catch (_) {
+        eventDate = DateTime.tryParse(eventTimestamp.toString());
+      }
+    }
+
     return Scaffold(
       backgroundColor: AppColors.bg(dark),
       body: SafeArea(
@@ -253,44 +312,61 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF16103A),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF9C6FFF).withOpacity(0.3), width: 1),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('Daily challenge',
-                              style: TextStyle(color: Color(0xFF9C6FFF), fontSize: 12, fontWeight: FontWeight.w600)),
-                          SizedBox(height: 4),
-                          Text('Quiz: 5 words from this week',
-                              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => TabSwitcher.of(context)?.switchTab(2),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF9C6FFF),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text('Go',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
-              const SizedBox(height: 22),
+              // ── Event card — only shown when admin has an active event ────
+              if (_eventLoading)
+                const SizedBox.shrink()
+              else if (_event != null && eventName != null)
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16103A),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF9C6FFF).withOpacity(0.3), width: 1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Event',
+                          style: TextStyle(
+                              color: Color(0xFF9C6FFF), fontSize: 20, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(eventName,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 14),
+                      if (eventDate != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF221A4A),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(_formatEventDate(eventDate),
+                              style: TextStyle(color: AppColors.textSecondary(true), fontSize: 12)),
+                        ),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: _toggleEventNotify,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _eventNotifyOn ? AppColors.cyan : const Color(0xFF9C6FFF),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Text(_eventNotifyOn ? "You'll be notified" : 'Notify Me',
+                                style: const TextStyle(
+                                    color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (!_eventLoading && _event != null) const SizedBox(height: 22),
+
               Row(
                 children: [
                   Text('RECENTLY SCANNED',

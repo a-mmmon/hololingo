@@ -146,63 +146,82 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
                       ),
                     ),
                     Expanded(
-                      child: GridView.builder(
+                      child: Padding(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 14,
-                          childAspectRatio: 0.95,
-                        ),
-                        itemCount: total,
-                        itemBuilder: (context, i) {
-                          final word = widget.topic.words[i];
-                          final isLearned = _learned.contains(word.word);
-                          final isNext = i == _learned.length;
-                          final locked = !isLearned && !isNext;
-                          return GestureDetector(
-                            onTap: locked ? null : () => _tapWord(word),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.card(dark),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: isLearned
-                                      ? Colors.green
-                                      : isNext
-                                          ? widget.topic.color
-                                          : AppColors.border(dark),
-                                  width: 1.5,
-                                ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            const crossAxisCount = 3;
+                            const spacing = 14.0;
+                            final rows = (total / crossAxisCount).ceil().clamp(1, 999);
+                            final tileWidth =
+                                (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
+                                    crossAxisCount;
+                            var tileHeight =
+                                (constraints.maxHeight - spacing * (rows - 1)) / rows;
+                            // Keep tiles from getting too tall when there are very few rows.
+                            tileHeight = tileHeight.clamp(tileWidth * 0.85, tileWidth * 1.6);
+
+                            return GridView.builder(
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: crossAxisCount,
+                                mainAxisSpacing: spacing,
+                                crossAxisSpacing: spacing,
+                                mainAxisExtent: tileHeight,
                               ),
-                              padding: const EdgeInsets.all(8),
-                              child: Center(
-                                child: locked
-                                    ? Icon(Icons.lock_rounded,
-                                        color: AppColors.textTertiary(dark), size: 20)
-                                    : Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(word.word,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                  color: isLearned
-                                                      ? Colors.green
-                                                      : AppColors.textPrimary(dark))),
-                                          const SizedBox(height: 3),
-                                          Text(word.translation,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: AppColors.textSecondary(dark))),
-                                        ],
+                              itemCount: total,
+                              itemBuilder: (context, i) {
+                                final word = widget.topic.words[i];
+                                final isLearned = _learned.contains(word.word);
+                                final isNext = i == _learned.length;
+                                final locked = !isLearned && !isNext;
+                                return GestureDetector(
+                                  onTap: locked ? null : () => _tapWord(word),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.card(dark),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isLearned
+                                            ? Colors.green
+                                            : isNext
+                                                ? widget.topic.color
+                                                : AppColors.border(dark),
+                                        width: 1.5,
                                       ),
-                              ),
-                            ),
-                          );
-                        },
+                                    ),
+                                    padding: const EdgeInsets.all(8),
+                                    child: Center(
+                                      child: locked
+                                          ? Icon(Icons.lock_rounded,
+                                              color: AppColors.textTertiary(dark), size: 20)
+                                          : Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Text(word.word,
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 14,
+                                                        color: isLearned
+                                                            ? Colors.green
+                                                            : AppColors.textPrimary(dark))),
+                                                const SizedBox(height: 3),
+                                                Text(word.translation,
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: AppColors.textSecondary(dark))),
+                                              ],
+                                            ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
                     ),
                     Padding(

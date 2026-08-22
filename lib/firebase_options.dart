@@ -57,7 +57,6 @@ class DefaultFirebaseOptions {
     projectId: 'hololingo-da112',
     storageBucket: 'hololingo-da112.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0',
     appId: '1:235920291560:ios:afb9347e6ef8166b19bb5d',
@@ -66,7 +65,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'hololingo-da112.firebasestorage.app',
     iosBundleId: 'com.example.arLanguageApp',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0',
     appId: '1:235920291560:ios:afb9347e6ef8166b19bb5d',
