@@ -28,7 +28,6 @@
         "lib/firebase_options.dart": {
           "projectId": "hololingo-da112",
           "configurations": {
-            "android": "1:235920291560:android:abd9d46561773a9719bb5d",
             "ios": "1:235920291560:ios:afb9347e6ef8166b19bb5d"
           }
         }
