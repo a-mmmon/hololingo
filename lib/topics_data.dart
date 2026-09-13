@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class TopicWord {
   final String word;
   final String translation;
+
   const TopicWord(this.word, this.translation);
 }
 
@@ -11,8 +12,9 @@ class TopicDef {
   final String name;
   final IconData icon;
   final Color color;
-  final Offset pos; // fractional position on the map
+  final Offset pos;
   final List<TopicWord> words;
+  final bool isPremium;
 
   const TopicDef({
     required this.id,
@@ -21,24 +23,27 @@ class TopicDef {
     required this.color,
     required this.pos,
     required this.words,
+    this.isPremium = false,
   });
 }
 
-// Ordered start → finish, matching the walking path on the map.
 const List<TopicDef> kTopics = [
   TopicDef(
-    id: 'colors',
-    name: 'Colors',
-    icon: Icons.palette_rounded,
+    id: 'things_around_me',
+    name: 'Things Around Me',
+    icon: Icons.home_rounded,
     color: Color(0xFF00C4C4),
     pos: Offset(0.16, 0.88),
     words: [
-      TopicWord('Red', 'สีแดง'),
-      TopicWord('Blue', 'สีฟ้า'),
-      TopicWord('Green', 'สีเขียว'),
-      TopicWord('Yellow', 'สีเหลือง'),
-      TopicWord('Purple', 'สีม่วง'),
-      TopicWord('Orange', 'สีส้ม'),
+      TopicWord('Bottle', 'ขวด'),
+      TopicWord('Chair', 'เก้าอี้'),
+      TopicWord('Laptop', 'แล็ปท็อป'),
+      TopicWord('Cell Phone', 'โทรศัพท์มือถือ'),
+      TopicWord('Clock', 'นาฬิกา'),
+      TopicWord('Remote', 'รีโมต'),
+      TopicWord('Vase', 'แจกัน'),
+      TopicWord('Scissors', 'กรรไกร'),
+      TopicWord('Cup', 'ถ้วย'),
     ],
   ),
   TopicDef(
@@ -48,12 +53,16 @@ const List<TopicDef> kTopics = [
     color: Color(0xFF4CAF50),
     pos: Offset(0.72, 0.62),
     words: [
-      TopicWord('Cat', 'แมว'),
-      TopicWord('Dog', 'หมา'),
       TopicWord('Bird', 'นก'),
-      TopicWord('Fish', 'ปลา'),
+      TopicWord('Cat', 'แมว'),
+      TopicWord('Dog', 'สุนัข'),
+      TopicWord('Horse', 'ม้า'),
+      TopicWord('Sheep', 'แกะ'),
+      TopicWord('Cow', 'วัว'),
       TopicWord('Elephant', 'ช้าง'),
-      TopicWord('Rabbit', 'กระต่าย'),
+      TopicWord('Bear', 'หมี'),
+      TopicWord('Zebra', 'ม้าลาย'),
+      TopicWord('Giraffe', 'ยีราฟ'),
     ],
   ),
   TopicDef(
@@ -64,11 +73,10 @@ const List<TopicDef> kTopics = [
     pos: Offset(0.24, 0.40),
     words: [
       TopicWord('Chair', 'เก้าอี้'),
-      TopicWord('Table', 'โต๊ะ'),
+      TopicWord('Couch', 'โซฟา'),
       TopicWord('Bed', 'เตียง'),
-      TopicWord('Sofa', 'โซฟา'),
-      TopicWord('Lamp', 'โคมไฟ'),
-      TopicWord('Shelf', 'ชั้นวาง'),
+      TopicWord('Dining Table', 'โต๊ะรับประทานอาหาร'),
+      TopicWord('Bench', 'ม้านั่ง'),
     ],
   ),
   TopicDef(
@@ -76,14 +84,36 @@ const List<TopicDef> kTopics = [
     name: 'Food',
     icon: Icons.restaurant_rounded,
     color: Color(0xFFFFB300),
-    pos: Offset(0.80, 0.14),
+    pos: Offset(0.82, 0.10),
     words: [
-      TopicWord('Rice', 'ข้าว'),
-      TopicWord('Bread', 'ขนมปัง'),
-      TopicWord('Egg', 'ไข่'),
-      TopicWord('Fruit', 'ผลไม้'),
-      TopicWord('Water', 'น้ำ'),
-      TopicWord('Noodle', 'ก๋วยเตี๋ยว'),
+      TopicWord('Apple', 'แอปเปิล'),
+      TopicWord('Banana', 'กล้วย'),
+      TopicWord('Orange', 'ส้ม'),
+      TopicWord('Pizza', 'พิซซ่า'),
+      TopicWord('Cake', 'เค้ก'),
+      TopicWord('Sandwich', 'แซนด์วิช'),
+      TopicWord('Hot Dog', 'ฮอตดอก'),
+      TopicWord('Broccoli', 'บรอกโคลี'),
+      TopicWord('Carrot', 'แครอท'),
+      TopicWord('Donut', 'โดนัท'),
+    ],
+  ),
+  TopicDef(
+    id: 'vehicles',
+    name: 'Vehicles',
+    icon: Icons.directions_car_rounded,
+    color: Color(0xFF42A5F5),
+    pos: Offset(0.40, 0.24),
+    isPremium: true,
+    words: [
+      TopicWord('Bicycle', 'จักรยาน'),
+      TopicWord('Car', 'รถยนต์'),
+      TopicWord('Motorcycle', 'รถจักรยานยนต์'),
+      TopicWord('Airplane', 'เครื่องบิน'),
+      TopicWord('Bus', 'รถบัส'),
+      TopicWord('Train', 'รถไฟ'),
+      TopicWord('Truck', 'รถบรรทุก'),
+      TopicWord('Boat', 'เรือ'),
     ],
   ),
 ];

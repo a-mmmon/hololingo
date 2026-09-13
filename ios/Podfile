@@ -9,25 +9,38 @@ project 'Runner', {
 }
 
 def flutter_root
-  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  generated_xcode_build_settings_path = File.expand_path(
+    File.join('..', 'Flutter', 'Generated.xcconfig'),
+    __FILE__
+  )
+
   unless File.exist?(generated_xcode_build_settings_path)
     raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
   end
+
   File.foreach(generated_xcode_build_settings_path) do |line|
     matches = line.match(/FLUTTER_ROOT\=(.*)/)
     return matches[1].strip if matches
   end
+
   raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
 end
 
-require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+require File.expand_path(
+  File.join('packages', 'flutter_tools', 'bin', 'podhelper'),
+  flutter_root
+)
 
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
   use_modular_headers!
+
+  # Keep Firebase iOS SDK components on the same version.
+  $FirebaseSDKVersion = '12.18.0'
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
   target 'RunnerTests' do
     inherit! :search_paths
   end
@@ -37,4 +50,84 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
   end
+end
+
+post_integrate do |installer_representation|
+
+  # =========================================================
+  # 1. Remove FirebaseFirestoreInternal weak framework flag
+  # =========================================================
+  #
+  # FirebaseFirestoreInternal is built as a library by CocoaPods.
+  # FirebaseFirestore also adds it as a weak framework.
+  #
+  # This creates:
+  #
+  #   -weak_framework "FirebaseFirestoreInternal"
+  #
+  # which causes:
+  #
+  #   Framework 'FirebaseFirestoreInternal' not found
+  #
+  # Remove only that linker flag.
+  # =========================================================
+
+  pods_runner_dir = File.join(
+    __dir__,
+    'Pods',
+    'Target Support Files',
+    'Pods-Runner'
+  )
+
+  %w[debug profile release].each do |configuration|
+    xcconfig_path = File.join(
+      pods_runner_dir,
+      "Pods-Runner.#{configuration}.xcconfig"
+    )
+
+    next unless File.exist?(xcconfig_path)
+
+    contents = File.read(xcconfig_path)
+
+    contents = contents.gsub(
+      ' -weak_framework "FirebaseFirestoreInternal"',
+      ''
+    )
+
+    File.write(xcconfig_path, contents)
+  end
+
+  # =========================================================
+  # 2. gRPC private modulemap
+  # =========================================================
+
+  grpc_private_dir = File.join(
+    __dir__,
+    'Pods',
+    'Headers',
+    'Private',
+    'grpc'
+  )
+
+  FileUtils.mkdir_p(grpc_private_dir)
+
+  modulemap_src = File.join(
+    __dir__,
+    'Pods',
+    'gRPC-Core',
+    'include',
+    'grpc',
+    'module.modulemap'
+  )
+
+  modulemap_dest = File.join(
+    grpc_private_dir,
+    'gRPC-Core.modulemap'
+  )
+
+  FileUtils.ln_sf(
+    modulemap_src,
+    modulemap_dest
+  )
+
 end

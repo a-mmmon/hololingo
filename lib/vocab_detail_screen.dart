@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'app_theme.dart';
@@ -10,6 +12,7 @@ class VocabDetailScreen extends StatefulWidget {
   final String definition;
   final String example;
   final String? imagePath;
+  final String? imageUrl;
 
   const VocabDetailScreen({
     super.key,
@@ -18,6 +21,7 @@ class VocabDetailScreen extends StatefulWidget {
     required this.definition,
     required this.example,
     this.imagePath,
+    this.imageUrl,
   });
 
   @override
@@ -30,10 +34,54 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
   bool _saving = false;
   final _noteController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _tts.setSharedInstance(true);
+      await _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+        ],
+        IosTextToSpeechAudioMode.voicePrompt,
+      );
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.5);
+      await _tts.setVolume(1.0);
+      await _tts.setPitch(1.0);
+      await _tts.awaitSpeakCompletion(true);
+    } catch (e) {
+      debugPrint('Vocab TTS init error: $e');
+    }
+  }
+
   Future<void> _speak() async {
-    await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.5);
-    await _tts.speak(widget.word);
+    if (widget.word.trim().isEmpty) return;
+    try {
+      await _tts.stop();
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.5);
+      await _tts.setVolume(1.0);
+      await _tts.setPitch(1.0);
+      final result = await _tts.speak(widget.word.trim());
+      debugPrint('Vocab TTS result: $result');
+    } catch (e) {
+      debugPrint('Vocab TTS error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not play pronunciation: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -45,6 +93,7 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
       'definition': widget.definition,
       'example': widget.example,
       'image_path': widget.imagePath ?? '',
+      'image_url': widget.imageUrl ?? '',
       'note': _noteController.text,
     });
     if (!mounted) return;
@@ -59,8 +108,61 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
     ));
   }
 
+  Widget _buildWordImage() {
+    final imageUrl = widget.imageUrl?.trim() ?? '';
+    final imagePath = widget.imagePath?.trim() ?? '';
+
+    if (imageUrl.isNotEmpty) {
+      return Image.network(
+        imageUrl,
+        width: 220,
+        height: 220,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) {
+          if (imagePath.isNotEmpty) {
+            return Image.file(
+              File(imagePath),
+              width: 220,
+              height: 220,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => _imagePlaceholder(),
+            );
+          }
+          return _imagePlaceholder();
+        },
+      );
+    }
+
+    if (imagePath.isNotEmpty) {
+      return Image.file(
+        File(imagePath),
+        width: 220,
+        height: 220,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => _imagePlaceholder(),
+      );
+    }
+
+    return _imagePlaceholder();
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      width: 220,
+      height: 220,
+      color: AppColors.card(ThemeProvider.isDark(context)),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        color: AppColors.cyan,
+        size: 42,
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _tts.stop();
     _noteController.dispose();
     super.dispose();
   }
@@ -145,6 +247,16 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
                                 fontSize: 15,
                                 fontStyle: FontStyle.italic)),
                       ),
+                    if ((widget.imageUrl ?? '').isNotEmpty ||
+                        (widget.imagePath ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: _buildWordImage(),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     Text(widget.definition,
                         style: TextStyle(

@@ -1,17 +1,23 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'firestore_service.dart';
+
 import 'app_theme.dart';
+import 'dictionary_service.dart';
+import 'firestore_service.dart';
+import 'vocab_detail_screen.dart';
 
 class SavedScreen extends StatefulWidget {
   const SavedScreen({super.key});
 
   @override
-  _SavedScreenState createState() => _SavedScreenState();
+  State<SavedScreen> createState() => _SavedScreenState();
 }
 
 class _SavedScreenState extends State<SavedScreen> {
-  List<Map<String, dynamic>> _savedWords = [];
+  List<Map<String, dynamic>> _words = [];
   bool _loading = true;
+  String _search = '';
 
   @override
   void initState() {
@@ -20,226 +26,435 @@ class _SavedScreenState extends State<SavedScreen> {
   }
 
   Future<void> _loadWords() async {
-    final words = await DatabaseService.getSavedWords();
-    if (mounted) setState(() { _savedWords = words; _loading = false; });
+    try {
+      final words = await FirestoreService.getSavedWords();
+      final fixedWords = <Map<String, dynamic>>[];
+
+      for (final item in words) {
+        final word = Map<String, dynamic>.from(item);
+        final wordName = (word['word'] ?? '').toString();
+        final definition = (word['definition'] ?? '').toString();
+
+        // Repair old saved words that were stored with an empty/broken
+        // definition, such as the earlier "Could not load definition" data.
+        if (wordName.isNotEmpty &&
+            (definition.trim().isEmpty ||
+                definition.toLowerCase().contains('could not load definition') ||
+                definition.toLowerCase().contains(
+                  'vocabulary information has not been added',
+                ))) {
+          try {
+            final info = await DictionaryService.getWordInfo(wordName);
+            word['phonetic'] = info['phonetic'] ?? word['phonetic'] ?? '';
+            word['definition'] = info['definition'] ?? word['definition'] ?? '';
+            word['example'] = info['example'] ?? word['example'] ?? '';
+
+            await FirestoreService.updateSavedWord(wordName, {
+              'phonetic': word['phonetic'],
+              'definition': word['definition'],
+              'example': word['example'],
+            });
+          } catch (e) {
+            debugPrint('Could not repair saved word $wordName: $e');
+          }
+        }
+
+        fixedWords.add(word);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _words = fixedWords;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('SavedScreen load error: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not load saved words: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
-  // Uses String word (matches Firestore doc ID) instead of int id
-  Future<void> _deleteWord(String word) async {
-    await DatabaseService.deleteWord(word);
+  List<Map<String, dynamic>> get _filteredWords {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return _words;
+    return _words.where((word) {
+      final name = (word['word'] ?? '').toString().toLowerCase();
+      final definition = (word['definition'] ?? '').toString().toLowerCase();
+      return name.contains(q) || definition.contains(q);
+    }).toList();
+  }
+
+  Future<void> _openWord(Map<String, dynamic> word) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VocabDetailScreen(
+          word: (word['word'] ?? '').toString(),
+          phonetic: (word['phonetic'] ?? '').toString(),
+          definition: (word['definition'] ?? '').toString(),
+          example: (word['example'] ?? '').toString(),
+          imagePath: (word['image_path'] ?? '').toString().isEmpty
+              ? null
+              : (word['image_path'] ?? '').toString(),
+          imageUrl: (word['image_url'] ?? '').toString().isEmpty
+              ? null
+              : (word['image_url'] ?? '').toString(),
+        ),
+      ),
+    );
     _loadWords();
   }
 
-  int _fakeStreak(int index) => [3, 5, 0, 1, 7, 2][index % 6];
+  Future<void> _deleteWord(String word) async {
+    try {
+      await FirestoreService.deleteWord(word);
+      if (!mounted) return;
+      setState(() {
+        _words.removeWhere(
+          (item) =>
+              (item['word'] ?? '').toString().toLowerCase() ==
+              word.toLowerCase(),
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('"$word" removed from saved words.')),
+      );
+    } catch (e) {
+      debugPrint('Delete saved word error: $e');
+    }
+  }
+
+  Future<void> _confirmDelete(String word) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          'Remove word?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Remove "$word" from your saved vocabulary?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Remove',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _deleteWord(word);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
-    final wordCount = _savedWords.length;
-    const weeklyGoal = 48, reviewed = 35;
-    const progress = reviewed / weeklyGoal;
+    final visibleWords = _filteredWords;
 
     return Scaffold(
       backgroundColor: AppColors.bg(dark),
       body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('My Vocab', style: TextStyle(
-                    fontSize: 30, fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary(dark), letterSpacing: -0.5)),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.card(dark),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border(dark)),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: AppColors.textPrimary(dark),
+                        size: 18,
+                      ),
+                    ),
+                  ),
                   const Spacer(),
-                  Text('$wordCount words', style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.cyan)),
+                  Text(
+                    'Saved words',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(dark),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() => _loading = true);
+                      _loadWords();
+                    },
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.card(dark),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border(dark)),
+                      ),
+                      child: const Icon(
+                        Icons.refresh_rounded,
+                        color: AppColors.cyan,
+                        size: 20,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progress.clamp(0.0, 1.0),
-                    backgroundColor: AppColors.secondary(dark),
-                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyan),
-                    minHeight: 6,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: TextField(
+                onChanged: (value) => setState(() => _search = value),
+                style: TextStyle(color: AppColors.textPrimary(dark)),
+                decoration: InputDecoration(
+                  hintText: 'Search saved words',
+                  hintStyle: TextStyle(color: AppColors.textSecondary(dark)),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: AppColors.textSecondary(dark),
+                  ),
+                  filled: true,
+                  fillColor: AppColors.card(dark),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Row(children: [
-                  Text('Weekly goal: $reviewed / $weeklyGoal',
-                    style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 12)),
-                  const Spacer(),
-                  Text('${(progress * 100).toStringAsFixed(0)}%',
-                    style: const TextStyle(color: Colors.green,
-                      fontSize: 12, fontWeight: FontWeight.w700)),
-                ]),
-              ]),
+              ),
             ),
-            const SizedBox(height: 20),
             Expanded(
               child: _loading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.cyan))
-                : _savedWords.isEmpty
-                  ? _emptyState(dark)
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                      children: [
-                        _SectionHeader('Recent scans', dark: dark),
-                        const SizedBox(height: 10),
-                        ..._recentWords().asMap().entries.map((e) {
-                          final streak = _fakeStreak(e.key);
-                          return _WordCard(
-                            word: e.value['word'] ?? '',
-                            translation: e.value['phonetic'] ?? '',
-                            streak: streak, isNew: streak == 0, dark: dark,
-                            onDelete: () => _deleteWord(e.value['word'] ?? ''));
-                        }),
-                        if (_needsReview().isNotEmpty) ...[
-                          const SizedBox(height: 20),
-                          _SectionHeader('Needs review', dark: dark),
-                          const SizedBox(height: 10),
-                          ..._needsReview().map((w) => _WordCard(
-                            word: w['word'] ?? '', translation: w['phonetic'] ?? '',
-                            streak: 0, needsReview: true, dark: dark,
-                            onDelete: () => _deleteWord(w['word'] ?? ''))),
-                        ],
-                      ],
-                    ),
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.cyan),
+                    )
+                  : visibleWords.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.bookmark_border_rounded,
+                                  size: 64,
+                                  color: AppColors.textTertiary(dark),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _search.trim().isEmpty
+                                      ? 'No saved words yet.\nScan an object and save its word!'
+                                      : 'No matching words.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary(dark),
+                                    fontSize: 15,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                          itemCount: visibleWords.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final word = visibleWords[index];
+                            return _SavedWordCard(
+                              word: word,
+                              dark: dark,
+                              onTap: () => _openWord(word),
+                              onDelete: () => _confirmDelete(
+                                (word['word'] ?? '').toString(),
+                              ),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
       ),
     );
   }
-
-  List<Map<String, dynamic>> _recentWords() =>
-      _savedWords.length <= 1 ? _savedWords : _savedWords.take(_savedWords.length - 1).toList();
-
-  List<Map<String, dynamic>> _needsReview() =>
-      _savedWords.isEmpty ? [] : [_savedWords.last];
-
-  Widget _emptyState(bool dark) => Center(
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.bookmark_border_rounded, size: 64,
-        color: AppColors.textTertiary(dark)),
-      const SizedBox(height: 16),
-      Text('No saved words yet!\nScan objects to start learning.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 15)),
-    ]),
-  );
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
+class _SavedWordCard extends StatelessWidget {
+  final Map<String, dynamic> word;
   final bool dark;
-  const _SectionHeader(this.title, {required this.dark});
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-    Expanded(child: Divider(color: AppColors.border(dark), thickness: 1)),
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Text(title, style: TextStyle(
-        color: AppColors.textSecondary(dark), fontSize: 12,
-        fontWeight: FontWeight.w600, letterSpacing: 0.5)),
-    ),
-    Expanded(child: Divider(color: AppColors.border(dark), thickness: 1)),
-  ]);
-}
-
-class _WordCard extends StatelessWidget {
-  final String word, translation;
-  final int streak;
-  final bool isNew, needsReview, dark;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
 
-  const _WordCard({
-    required this.word, required this.translation, required this.streak,
-    this.isNew = false, this.needsReview = false,
-    required this.dark, required this.onDelete,
+  const _SavedWordCard({
+    required this.word,
+    required this.dark,
+    required this.onTap,
+    required this.onDelete,
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onLongPress: () => showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card(dark),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(word, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary(dark))),
-          const SizedBox(height: 16),
-          ListTile(
-            leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-            title: const Text('Delete word', style: TextStyle(color: Colors.redAccent)),
-            onTap: () { Navigator.pop(context); onDelete(); },
-          ),
-        ]),
+  Widget build(BuildContext context) {
+    final name = (word['word'] ?? '').toString();
+    final phonetic = (word['phonetic'] ?? '').toString();
+    final definition = (word['definition'] ?? '').toString();
+    final imagePath = (word['image_path'] ?? '').toString();
+    final imageUrl = (word['image_url'] ?? '').toString();
+
+    Widget leading;
+    if (imageUrl.isNotEmpty) {
+      leading = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          imageUrl,
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) {
+            if (imagePath.isNotEmpty && File(imagePath).existsSync()) {
+              return Image.file(
+                File(imagePath),
+                width: 52,
+                height: 52,
+                fit: BoxFit.cover,
+              );
+            }
+            return Container(
+              width: 52,
+              height: 52,
+              color: AppColors.cyan.withValues(alpha: 0.12),
+              child: const Icon(
+                Icons.bookmark_rounded,
+                color: AppColors.cyan,
+                size: 24,
+              ),
+            );
+          },
+        ),
+      );
+    } else if (imagePath.isNotEmpty && File(imagePath).existsSync()) {
+      leading = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          File(imagePath),
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+        ),
+      );
+    } else {
+      leading = Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: AppColors.cyan.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(
+          Icons.bookmark_rounded,
+          color: AppColors.cyan,
+          size: 24,
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onDelete,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card(dark),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border(dark)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.shadow(dark),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      color: AppColors.textPrimary(dark),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (phonetic.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      phonetic,
+                      style: const TextStyle(
+                        color: AppColors.cyan,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  if (definition.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      definition,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textSecondary(dark),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary(dark),
+              size: 22,
+            ),
+          ],
+        ),
       ),
-    ),
-    child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.card(dark),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: needsReview
-            ? Colors.redAccent.withValues(alpha: 0.4)
-            : AppColors.border(dark)),
-        boxShadow: [BoxShadow(color: AppColors.shadow(dark), blurRadius: 4)],
-      ),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(word, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary(dark))),
-          const SizedBox(height: 4),
-          Text(translation.isNotEmpty ? translation : '—',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary(dark))),
-        ])),
-        if (needsReview)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.redAccent)),
-            child: const Text('Review now', style: TextStyle(
-              color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600)),
-          )
-        else if (isNew)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.secondary(dark),
-              borderRadius: BorderRadius.circular(20)),
-            child: Text('New', style: TextStyle(
-              color: AppColors.textSecondary(dark), fontSize: 12, fontWeight: FontWeight.w600)),
-          )
-        else
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.flame.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Text('🔥', style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 4),
-              Text('$streak', style: TextStyle(
-                color: AppColors.flame, fontSize: 14, fontWeight: FontWeight.w700)),
-            ]),
-          ),
-      ]),
-    ),
-  );
+    );
+  }
 }
