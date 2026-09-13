@@ -1,6 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_ai/firebase_ai.dart';
+
 import 'app_theme.dart';
 import 'firestore_service.dart';
 
@@ -11,105 +11,31 @@ class GobotScreen extends StatefulWidget {
   State<GobotScreen> createState() => _GobotScreenState();
 }
 
+class _GobotMessage {
+  final bool fromUser;
+  final String text;
+
+  const _GobotMessage({required this.fromUser, required this.text});
+}
+
 class _GobotScreenState extends State<GobotScreen> {
-  final _controller = TextEditingController();
-  final _scrollController = ScrollController();
-  final List<_Message> _messages = [];
-  List<String> _savedWords = [];
-  bool _isTyping = false;
-  bool _loadingWords = true;
-  String? _initError;
+  static const String _modelName = 'gemini-3.7-flash';
 
-  ChatSession? _chat;
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
-  final List<String> _suggestions = [
-    'Use one of my words in a sentence',
-    'Quiz me on my saved words',
-    'Explain the difference between two of my words',
-  ];
+  final List<_GobotMessage> _messages = [];
+
+  GenerativeModel? _model;
+  List<Map<String, dynamic>> _savedWords = [];
+  bool _loading = true;
+  bool _sending = false;
 
   @override
   void initState() {
     super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    try {
-      final words = await DatabaseService.getSavedWords();
-      _savedWords = words
-          .map((w) => (w['word'] ?? '').toString())
-          .where((w) => w.isNotEmpty)
-          .toList();
-
-      final model = FirebaseAI.googleAI().generativeModel(
-        model: 'gemini-2.5-flash',
-        systemInstruction: Content.system(
-          'You are Holo AI tutor, a friendly language-learning chatbot '
-          'inside the HoloLingo app. The user has saved these vocabulary '
-          'words: ${_savedWords.isEmpty ? "(no words saved yet)" : _savedWords.join(", ")}. '
-          'Use ONLY these saved words when creating example sentences, quiz '
-          'questions, or comparisons — do not invent vocabulary they have '
-          'not saved. If they ask something unrelated to their words, '
-          'answer briefly and steer them back to practicing their saved '
-          'words. Keep replies short (2-4 sentences), warm, and '
-          'encouraging. When quizzing, ask one question at a time and wait '
-          'for their answer before moving on.',
-        ),
-      );
-      _chat = model.startChat();
-    } catch (e) {
-      _initError = e.toString();
-    }
-    if (mounted) setState(() => _loadingWords = false);
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-  }
-
-  Future<void> _sendMessage(String text) async {
-    if (text.trim().isEmpty || _chat == null) return;
-    _controller.clear();
-
-    setState(() {
-      _messages.add(_Message(text: text, isUser: true));
-      _isTyping = true;
-    });
-    _scrollToBottom();
-    unawaited(DatabaseService.saveChatMessage(role: 'user', content: text));
-
-    try {
-      final response = await _chat!.sendMessage(Content.text(text));
-      final reply = (response.text?.trim().isNotEmpty ?? false)
-          ? response.text!.trim()
-          : "Sorry, I couldn't come up with a reply — try asking again.";
-      if (!mounted) return;
-      setState(() {
-        _isTyping = false;
-        _messages.add(_Message(text: reply, isUser: false));
-      });
-      unawaited(
-          DatabaseService.saveChatMessage(role: 'assistant', content: reply));
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isTyping = false;
-        _messages.add(_Message(
-          text: 'Something went wrong reaching the AI: $e',
-          isUser: false,
-        ));
-      });
-    }
-    _scrollToBottom();
+    _model = FirebaseAI.googleAI().generativeModel(model: _modelName);
+    _loadChat();
   }
 
   @override
@@ -119,379 +45,427 @@ class _GobotScreenState extends State<GobotScreen> {
     super.dispose();
   }
 
+  Future<void> _loadChat() async {
+    try {
+      final results = await Future.wait([
+        FirestoreService.getSavedWords(),
+        FirestoreService.getChatHistory(limit: 30),
+      ]);
+
+      final words = List<Map<String, dynamic>>.from(results[0] as List);
+      final history = List<Map<String, String>>.from(results[1] as List);
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedWords = words;
+        _messages
+          ..clear()
+          ..addAll(
+            history.map(
+              (item) => _GobotMessage(
+                fromUser: item['role'] == 'user',
+                text: item['content'] ?? '',
+              ),
+            ),
+          );
+        _loading = false;
+      });
+
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('Gobot load error: $e');
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  String _wordListForPrompt() {
+    if (_savedWords.isEmpty) return '(No saved words yet.)';
+
+    return _savedWords.map((word) {
+      final name = (word['word'] ?? '').toString();
+      final definition = (word['definition'] ?? '').toString();
+      return '- $name${definition.isEmpty ? '' : ': $definition'}';
+    }).join('\n');
+  }
+
+  String _historyForPrompt() {
+    if (_messages.isEmpty) return '(No previous conversation.)';
+
+    final recent = _messages.length > 12
+        ? _messages.sublist(_messages.length - 12)
+        : _messages;
+
+    return recent.map((message) {
+      final role = message.fromUser ? 'Student' : 'Tutor';
+      return '$role: ${message.text}';
+    }).join('\n');
+  }
+
+  Future<void> _sendMessage([String? preset]) async {
+    if (_sending) return;
+
+    final text = (preset ?? _controller.text).trim();
+    if (text.isEmpty) return;
+
+    _controller.clear();
+
+    setState(() {
+      _messages.add(_GobotMessage(fromUser: true, text: text));
+      _sending = true;
+    });
+    _scrollToBottom();
+
+    try {
+      await FirestoreService.saveChatMessage(
+        role: 'user',
+        content: text,
+      );
+
+      final prompt =
+          '''You are Holo, the friendly AI English vocabulary tutor inside HoloLingo.
+
+The student is learning English by scanning real-world objects.
+Only use the student's saved words as the vocabulary set when the request refers to "my words" or their saved vocabulary.
+Be concise, encouraging, and suitable for a high-school learner.
+If the student asks for a sentence, give a natural English sentence and briefly explain it.
+If the student asks about a word that is not saved, you may still answer normally, but clearly distinguish it from their saved vocabulary.
+Do not claim that you can see an object or image unless one was actually provided.
+
+SAVED WORDS:
+${_wordListForPrompt()}
+
+RECENT CONVERSATION:
+${_historyForPrompt()}
+
+STUDENT'S NEW MESSAGE:
+$text
+
+Answer the student now.''';
+
+      final model = _model;
+      if (model == null) {
+        throw StateError('AI model is not initialized.');
+      }
+
+      final response = await model.generateContent([
+        Content.text(prompt),
+      ]);
+
+      final answer = response.text?.trim();
+      if (answer == null || answer.isEmpty) {
+        throw StateError('The AI returned an empty response.');
+      }
+
+      await FirestoreService.saveChatMessage(
+        role: 'assistant',
+        content: answer,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_GobotMessage(fromUser: false, text: answer));
+        _sending = false;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('Gobot AI error: $e');
+
+      if (!mounted) return;
+      setState(() => _sending = false);
+
+      final message = _friendlyAiError(e);
+      setState(() {
+        _messages.add(_GobotMessage(fromUser: false, text: message));
+      });
+      _scrollToBottom();
+    }
+  }
+
+  String _friendlyAiError(Object error) {
+    final text = error.toString().toLowerCase();
+
+    if (text.contains('not found') ||
+        text.contains('no longer available') ||
+        text.contains('model')) {
+      return 'I could not connect to my AI model. Please make sure the Firebase AI Logic setup is up to date and the Gemini model is enabled for this Firebase project.';
+    }
+
+    if (text.contains('permission') || text.contains('unauthorized')) {
+      return 'I do not have permission to use the AI service yet. Please check the Firebase AI Logic and App Check configuration.';
+    }
+
+    return 'I could not reach the AI right now. Please try again in a moment.';
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
+
     return Scaffold(
       backgroundColor: AppColors.bg(dark),
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-              decoration: BoxDecoration(
-                color: AppColors.bg(dark),
-                border: Border(
-                    bottom: BorderSide(color: AppColors.border(dark))),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.cyan.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppColors.cyan.withValues(alpha: 0.4),
-                          width: 1.5),
-                    ),
-                    child: const Icon(Icons.smart_toy_rounded,
-                        color: AppColors.cyan, size: 24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Holo AI Tutor',
+                  style: TextStyle(
+                    color: const Color(0xFF7C5CBF),
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Holo AI tutor',
-                            style: TextStyle(
-                                color: AppColors.textPrimary(dark),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700)),
-                        Text(
-                            _loadingWords
-                                ? 'Loading your words...'
-                                : 'Using your ${_savedWords.length} saved words',
-                            style: const TextStyle(
-                                color: AppColors.cyan, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary(dark),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.menu_rounded,
-                        color: AppColors.textSecondary(dark), size: 20),
-                  ),
-                ],
+                ),
               ),
             ),
-
-            // ── Messages ────────────────────────────────────────────────
             Expanded(
-              child: _initError != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Couldn\'t start the AI tutor: $_initError',
-                        style: const TextStyle(color: Colors.redAccent),
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.cyan,
                       ),
                     )
-                  : _messages.isEmpty
-                      ? _buildEmptyState(dark)
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          itemCount: _messages.length + (_isTyping ? 1 : 0),
-                          itemBuilder: (context, i) {
-                            if (_isTyping && i == _messages.length) {
-                              return _TypingBubble(dark: dark);
-                            }
-                            return _MessageBubble(
-                              message: _messages[i],
-                              dark: dark,
-                            );
-                          },
-                        ),
+                  : _buildConversation(dark),
             ),
-
-            // ── Input ────────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              decoration: BoxDecoration(
-                color: AppColors.bg(dark),
-                border: Border(top: BorderSide(color: AppColors.border(dark))),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.card(dark),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                            color: AppColors.border(dark), width: 1),
-                      ),
-                      child: TextField(
-                        controller: _controller,
-                        enabled: !_loadingWords && _initError == null,
-                        style: TextStyle(
-                            color: AppColors.textPrimary(dark), fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Ask about your words...',
-                          hintStyle: TextStyle(
-                              color: AppColors.textSecondary(dark),
-                              fontSize: 14),
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onSubmitted: _sendMessage,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: (_loadingWords || _initError != null)
-                        ? null
-                        : () => _sendMessage(_controller.text),
-                    child: Container(
-                      width: 44, height: 44,
-                      decoration: const BoxDecoration(
-                        color: AppColors.cyan,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_upward_rounded,
-                          color: Colors.black, size: 20),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildComposer(dark),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState(bool dark) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.cyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.smart_toy_rounded,
-                    color: AppColors.cyan, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.card(dark),
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    _loadingWords
-                        ? 'Loading your saved words...'
-                        : (_savedWords.isEmpty
-                            ? "You haven't saved any words yet — save some first, then come back and I'll quiz you on them!"
-                            : 'Hi! I know your ${_savedWords.length} saved words. '
-                                'Ask me anything — try using them in sentences or compare similar words.'),
-                    style: TextStyle(
-                        color: AppColors.textPrimary(dark),
-                        fontSize: 14,
-                        height: 1.5),
-                  ),
-                ),
-              ),
-            ],
+  Widget _buildConversation(bool dark) {
+    return ListView(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      children: [
+        if (_messages.isEmpty) ...[
+          _suggestion(
+            dark,
+            'Use one of my words in a sentence',
           ),
-          const SizedBox(height: 28),
-          if (!_loadingWords && _savedWords.isNotEmpty) ...[
-            Text('TRY ASKING',
-                style: TextStyle(
-                    color: AppColors.textSecondary(dark),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2)),
-            const SizedBox(height: 12),
-            ..._suggestions.map((s) => GestureDetector(
-                  onTap: () => _sendMessage(s),
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(
-                          color: AppColors.border(dark), width: 1.5),
-                    ),
-                    child: Text(s,
-                        style: TextStyle(
-                            color: AppColors.cyan,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500)),
-                  ),
-                )),
-          ],
+          const SizedBox(height: 12),
+          _suggestion(
+            dark,
+            'Quiz me on my saved words',
+          ),
+          const SizedBox(height: 12),
+          _suggestion(
+            dark,
+            'Give me an easy vocabulary practice',
+          ),
         ],
-      ),
+        ..._messages.map((message) => _messageBubble(dark, message)),
+        if (_sending) _typingBubble(dark),
+      ],
     );
   }
-}
 
-// ── Data model ────────────────────────────────────────────────────────────────
-class _Message {
-  final String text;
-  final bool isUser;
-
-  _Message({required this.text, required this.isUser});
-}
-
-// ── Message Bubble ────────────────────────────────────────────────────────────
-class _MessageBubble extends StatelessWidget {
-  final _Message message;
-  final bool dark;
-
-  const _MessageBubble({required this.message, required this.dark});
-
-  @override
-  Widget build(BuildContext context) {
-    if (message.isUser) {
-      return Align(
-        alignment: Alignment.centerRight,
+  Widget _suggestion(bool dark, String text) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: GestureDetector(
+        onTap: _sending ? null : () => _sendMessage(text),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 12, left: 60),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
           decoration: BoxDecoration(
             color: AppColors.cyan,
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-              bottomLeft: Radius.circular(16),
+              topLeft: Radius.circular(22),
+              topRight: Radius.circular(22),
+              bottomLeft: Radius.circular(22),
             ),
           ),
-          child: Text(message.text,
-              style: const TextStyle(
-                  color: Colors.black, fontSize: 14, height: 1.4)),
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _messageBubble(bool dark, _GobotMessage message) {
+    if (message.fromUser) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12, left: 45),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.cyan,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+              bottomLeft: Radius.circular(20),
+            ),
+          ),
+          child: Text(
+            message.text,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 16,
+              height: 1.35,
+            ),
+          ),
         ),
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+    return Align(
+      alignment: Alignment.centerLeft,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 36, height: 36,
+            width: 48,
+            height: 48,
+            margin: const EdgeInsets.only(right: 12, top: 2),
             decoration: BoxDecoration(
-              color: AppColors.cyan.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
+              color: AppColors.cyan.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(15),
             ),
-            child: const Icon(Icons.smart_toy_rounded,
-                color: AppColors.cyan, size: 20),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/gobot.png',
+                width: 44,
+                height: 44,
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
-          const SizedBox(width: 10),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
               decoration: BoxDecoration(
                 color: AppColors.card(dark),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(16),
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                message.text,
+                style: TextStyle(
+                  color: AppColors.textPrimary(dark),
+                  fontSize: 16,
+                  height: 1.45,
                 ),
               ),
-              child: Text(message.text,
-                  style: TextStyle(
-                      color: AppColors.textPrimary(dark),
-                      fontSize: 14,
-                      height: 1.5)),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-// ── Typing indicator ──────────────────────────────────────────────────────────
-class _TypingBubble extends StatefulWidget {
-  final bool dark;
-  const _TypingBubble({required this.dark});
-
-  @override
-  State<_TypingBubble> createState() => _TypingBubbleState();
-}
-
-class _TypingBubbleState extends State<_TypingBubble>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800))
-      ..repeat(reverse: true);
+  Widget _typingBubble(bool dark) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(left: 60, bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.card(dark),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const SizedBox(
+          width: 24,
+          height: 18,
+          child: Center(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                color: AppColors.cyan,
+                strokeWidth: 2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  Widget _buildComposer(bool dark) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+      decoration: BoxDecoration(
+        color: AppColors.bg(dark),
+        border: Border(
+          top: BorderSide(color: AppColors.border(dark)),
+        ),
+      ),
       child: Row(
         children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.cyan.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              enabled: !_sending,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _sendMessage(),
+              style: TextStyle(color: AppColors.textPrimary(dark)),
+              decoration: InputDecoration(
+                hintText: 'Ask about your words...',
+                hintStyle: TextStyle(color: AppColors.textSecondary(dark)),
+                filled: true,
+                fillColor: AppColors.card(dark),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 17,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(32),
+                  borderSide: BorderSide(color: AppColors.border(dark)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(32),
+                  borderSide: BorderSide(color: AppColors.border(dark)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(32),
+                  borderSide: const BorderSide(
+                    color: AppColors.cyan,
+                    width: 1.5,
+                  ),
+                ),
+              ),
             ),
-            child: const Icon(Icons.smart_toy_rounded,
-                color: AppColors.cyan, size: 20),
           ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.card(widget.dark),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: AnimatedBuilder(
-              animation: _anim,
-              builder: (_, __) => Row(
-                children: List.generate(3, (i) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 7, height: 7,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.cyan.withValues(
-                          alpha: 0.3 + 0.7 * (((_anim.value + i * 0.3) % 1.0))),
-                    ),
-                  );
-                }),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: _sending ? null : () => _sendMessage(),
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: _sending
+                    ? AppColors.cyan.withValues(alpha: 0.45)
+                    : AppColors.cyan,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.arrow_upward_rounded,
+                color: Colors.black,
+                size: 31,
               ),
             ),
           ),

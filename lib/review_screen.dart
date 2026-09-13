@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 import 'firestore_service.dart';
+import 'dictionary_service.dart';
+import 'vocab_detail_screen.dart';
 import 'quiz_screen.dart';
 
 class ReviewScreen extends StatefulWidget {
@@ -12,6 +14,7 @@ class ReviewScreen extends StatefulWidget {
 class _ReviewScreenState extends State<ReviewScreen> {
   List<Map<String, dynamic>> _savedWords = [];
   bool _loading = true;
+  String _reviewFrequency = 'weekly';
 
   @override
   void initState() { super.initState(); _loadWords(); }
@@ -19,7 +22,51 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Future<void> _loadWords() async {
     try {
       final words = await DatabaseService.getSavedWords();
-      if (mounted) setState(() { _savedWords = words; _loading = false; });
+      final profile = await FirestoreService.getProfileOrDefault();
+      final fixedWords = <Map<String, dynamic>>[];
+
+      for (final word in words) {
+        final copy = Map<String, dynamic>.from(word);
+        final wordName = (copy['word'] ?? '').toString();
+        final oldDefinition = (copy['definition'] ?? '').toString();
+
+        final needsDefinition = wordName.isNotEmpty &&
+            (oldDefinition.trim().isEmpty ||
+                oldDefinition.toLowerCase().contains('could not load definition') ||
+                oldDefinition.toLowerCase().contains(
+                  'vocabulary information has not been added',
+                ));
+
+        if (needsDefinition) {
+          try {
+            final info = await DictionaryService.getWordInfo(wordName);
+            copy['phonetic'] = info['phonetic'] ?? copy['phonetic'] ?? '';
+            copy['definition'] = info['definition'] ?? copy['definition'] ?? '';
+            copy['example'] = info['example'] ?? copy['example'] ?? '';
+
+            await DatabaseService.updateSavedWord(wordName, {
+              'phonetic': copy['phonetic'],
+              'definition': copy['definition'],
+              'example': copy['example'],
+            });
+          } catch (e) {
+            debugPrint('Could not repair $wordName: $e');
+          }
+        }
+
+        fixedWords.add(copy);
+      }
+
+      if (mounted) {
+        final frequency =
+            profile['review_reminder_frequency']?.toString().toLowerCase();
+
+        setState(() {
+          _savedWords = fixedWords;
+          _reviewFrequency = frequency == 'monthly' ? 'monthly' : 'weekly';
+          _loading = false;
+        });
+      }
     } catch (e) {
       debugPrint('ReviewScreen load error: $e');
       if (mounted) setState(() => _loading = false);
@@ -50,7 +97,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 Text('${_savedWords.length} words saved · ${_needsReview.length} need review',
                   style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13)),
                 const SizedBox(height: 20),
-                _WeeklyProgressCard(total: _savedWords.length, dark: dark),
+                _ReviewProgressCard(
+                  total: _savedWords.length,
+                  frequency: _reviewFrequency,
+                  dark: dark,
+                ),
                 const SizedBox(height: 20),
                 Row(children: [
                   Expanded(child: _ActionCard(
@@ -76,7 +127,21 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   const SizedBox(height: 12),
                   ..._needsReview.map((w) => _ReviewWordTile(
                     word: w['word'] ?? '', definition: w['definition'] ?? '',
-                    phonetic: w['phonetic'] ?? '', dark: dark)),
+                    phonetic: w['phonetic'] ?? '', dark: dark,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => VocabDetailScreen(
+                          word: (w['word'] ?? '').toString(),
+                          phonetic: (w['phonetic'] ?? '').toString(),
+                          definition: (w['definition'] ?? '').toString(),
+                          example: (w['example'] ?? '').toString(),
+                          imagePath: (w['image_path'] ?? '').toString().isEmpty
+                              ? null
+                              : (w['image_path'] ?? '').toString(),
+                        ),
+                      ),
+                    ))),
                 ],
                 if (_savedWords.isEmpty)
                   Center(child: Padding(
@@ -102,14 +167,20 @@ class _ReviewScreenState extends State<ReviewScreen> {
       dark: ThemeProvider.isDark(context)));
 }
 
-class _WeeklyProgressCard extends StatelessWidget {
+class _ReviewProgressCard extends StatelessWidget {
   final int total;
+  final String frequency;
   final bool dark;
-  const _WeeklyProgressCard({required this.total, required this.dark});
+
+  const _ReviewProgressCard({
+    required this.total,
+    required this.frequency,
+    required this.dark,
+  });
 
   @override
   Widget build(BuildContext context) {
-    const goal = 20;
+    final goal = frequency == 'monthly' ? 50 : 20;
     final progress = (total / goal).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(20),
@@ -120,8 +191,11 @@ class _WeeklyProgressCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('Weekly Goal', style: TextStyle(
-            color: AppColors.textPrimary(dark), fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(
+            frequency == 'monthly' ? 'Monthly Goal' : 'Weekly Goal',
+            style: TextStyle(
+            color: AppColors.textPrimary(dark), fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           const Spacer(),
           Text('$total / $goal words', style: const TextStyle(
             color: AppColors.cyan, fontSize: 13, fontWeight: FontWeight.w700)),
@@ -135,7 +209,10 @@ class _WeeklyProgressCard extends StatelessWidget {
             minHeight: 8),
         ),
         const SizedBox(height: 8),
-        Text(progress >= 1.0 ? '🎉 Goal reached this week!'
+        Text(progress >= 1.0
+          ? (frequency == 'monthly'
+              ? '🎉 Goal reached this month!'
+              : '🎉 Goal reached this week!')
           : '${((1 - progress) * goal).ceil()} more words to reach your goal',
           style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 12)),
       ]),
@@ -178,11 +255,20 @@ class _ActionCard extends StatelessWidget {
 class _ReviewWordTile extends StatelessWidget {
   final String word, definition, phonetic;
   final bool dark;
-  const _ReviewWordTile({required this.word, required this.definition,
-    required this.phonetic, required this.dark});
+  final VoidCallback? onTap;
+  const _ReviewWordTile({
+    required this.word,
+    required this.definition,
+    required this.phonetic,
+    required this.dark,
+    this.onTap,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Container(
     margin: const EdgeInsets.only(bottom: 10),
     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
     decoration: BoxDecoration(
@@ -206,7 +292,8 @@ class _ReviewWordTile extends StatelessWidget {
       ])),
       const Icon(Icons.chevron_right_rounded, color: Colors.redAccent, size: 20),
     ]),
-  );
+  ),
+);
 }
 
 class _FlashcardSheet extends StatefulWidget {

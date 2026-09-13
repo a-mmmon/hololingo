@@ -1,4 +1,9 @@
+import 'dart:io';
+
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
 import 'firestore_service.dart';
 import 'app_theme.dart';
 
@@ -15,6 +20,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String _selectedLanguage = 'English (US)';
   bool _isSaving = false;
   bool _isLoading = true;
+  bool _isUploadingPhoto = false;
+
+  File? _pickedPhoto;
+  String? _photoUrl;
 
   final List<String> _languages = [
     'English (US)',
@@ -41,17 +50,85 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _nameController.text = data['name'] ?? '';
       _cityController.text = data['city'] ?? 'Bangkok';
       _selectedLanguage = data['language'] ?? 'English (US)';
+      _photoUrl = data['photo_url']?.toString();
       _isLoading = false;
     });
   }
 
+  Future<void> _pickPhoto() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        imageQuality: 85,
+      );
+
+      if (picked == null) return;
+
+      setState(() {
+        _pickedPhoto = File(picked.path);
+      });
+    } catch (e) {
+      debugPrint('Pick photo error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open photo library.')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _uploadPhotoIfNeeded() async {
+    final file = _pickedPhoto;
+    if (file == null) return _photoUrl;
+
+    setState(() => _isUploadingPhoto = true);
+
+    try {
+      final uid = FirestoreService.currentUserId;
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child('$uid.jpg');
+
+      await ref.putFile(file);
+      final url = await ref.getDownloadURL();
+
+      if (mounted) setState(() => _isUploadingPhoto = false);
+      return url;
+    } catch (e) {
+      debugPrint('Photo upload error: $e');
+      if (mounted) setState(() => _isUploadingPhoto = false);
+      rethrow;
+    }
+  }
+
   Future<void> _saveProfile() async {
     setState(() => _isSaving = true);
+
+    String? photoUrl;
+    try {
+      photoUrl = await _uploadPhotoIfNeeded();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not upload photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => _isSaving = false);
+      return;
+    }
+
     try {
       await FirestoreService.updateProfile({
         'name': _nameController.text.trim(),
         'city': _cityController.text.trim(),
         'language': _selectedLanguage,
+        if (photoUrl != null) 'photo_url': photoUrl,
       });
     } catch (e) {
       debugPrint('Save profile error: $e');
@@ -114,7 +191,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         centerTitle: true,
         actions: [
           GestureDetector(
-            onTap: _isSaving ? null : _saveProfile,
+            onTap: (_isSaving || _isUploadingPhoto) ? null : _saveProfile,
             child: Container(
               margin: const EdgeInsets.all(8),
               padding:
@@ -123,7 +200,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 color: AppColors.cyan,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: _isSaving
+              child: (_isSaving || _isUploadingPhoto)
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -146,27 +223,91 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Avatar
+                  // Avatar with photo picker
                   Center(
-                    child: Container(
-                      width: 88,
-                      height: 88,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border:
-                            Border.all(color: AppColors.cyan, width: 2.5),
-                        color: AppColors.card(dark),
+                    child: GestureDetector(
+                      onTap: _isUploadingPhoto ? null : _pickPhoto,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 88,
+                            height: 88,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border:
+                                  Border.all(color: AppColors.cyan, width: 2.5),
+                              color: AppColors.card(dark),
+                              image: _pickedPhoto != null
+                                  ? DecorationImage(
+                                      image: FileImage(_pickedPhoto!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : (_photoUrl != null && _photoUrl!.isNotEmpty)
+                                      ? DecorationImage(
+                                          image: NetworkImage(_photoUrl!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                            ),
+                            child: (_pickedPhoto == null &&
+                                    (_photoUrl == null || _photoUrl!.isEmpty))
+                                ? Center(
+                                    child: Text(
+                                      _nameController.text.isNotEmpty
+                                          ? _nameController.text[0]
+                                              .toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.cyan),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: -2,
+                            right: -2,
+                            child: Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.cyan,
+                                border: Border.all(
+                                  color: AppColors.bg(dark),
+                                  width: 2,
+                                ),
+                              ),
+                              child: _isUploadingPhoto
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(6),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.black,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 16,
+                                      color: Colors.black,
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Center(
-                        child: Text(
-                          _nameController.text.isNotEmpty
-                              ? _nameController.text[0].toUpperCase()
-                              : 'U',
-                          style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.cyan),
-                        ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Center(
+                    child: Text(
+                      'Tap to change photo',
+                      style: TextStyle(
+                        color: AppColors.textSecondary(dark),
+                        fontSize: 12,
                       ),
                     ),
                   ),
@@ -234,7 +375,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isSaving ? null : _saveProfile,
+                      onPressed:
+                          (_isSaving || _isUploadingPhoto) ? null : _saveProfile,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.cyan,
                         foregroundColor: Colors.black,
@@ -242,7 +384,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: _isSaving
+                      child: (_isSaving || _isUploadingPhoto)
                           ? const SizedBox(
                               width: 20,
                               height: 20,

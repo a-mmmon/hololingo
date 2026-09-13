@@ -1,36 +1,81 @@
 name: ar_language_app
+
 description: Object scanning vocabulary learning app
-publish_to: 'none'
+
+publish_to: "none"
+
 version: 1.0.0+1
+
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.0.0 <4.0.0"
+
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^4.4.0
-  firebase_auth: ^6.1.4
-  cloud_firestore: ^6.1.2
-  firebase_storage: ^13.0.0   # check latest on pub.dev, was on major 12 before
-  # Camera / on-device object detection
+
+  firebase_core: 4.14.0
+  firebase_auth: 6.6.1
+  cloud_firestore: 6.9.0
+  firebase_storage: 13.5.0
+
   camera: ^0.11.0+2
-  # google_mlkit_image_labeling: ^0.12.0   # uncomment if detector_service.dart imports this
-  # tflite_flutter: ^0.10.4                # uncomment if detector_service.dart imports this
-  # Networking (dictionary lookups, etc.)
   http: ^1.2.1
-  # AR placement
   vector_math: ^2.1.4
-  arcore_flutter_plugin: ^0.1.0
-  # TTS + local prefs (theme toggle only — not word storage)
+  arkit_plugin: ^1.5.0
   flutter_tts: ^4.2.2
   shared_preferences: ^2.3.2
+  path_provider: ^2.1.5
   firebase_ai: ^3.15.0
+  tflite_flutter: ^0.12.1
+  image: ^4.9.2
+  share_plus: ^11.1.0
+  image_picker: ^1.2.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.3
+
 flutter:
   uses-material-design: true
-  # If DetectorService still needs a bundled tflite model, uncomment:
-  # assets:
-  #   - assets/detect.tflite
-  #   - assets/labelmap.txt
+
+  assets:
+    - assets/hololingo.png
+    - assets/detect.tflite
+    - assets/Models/best.tflite
+    - assets/dictionary/a/
+    - assets/dictionary/b/
+    - assets/dictionary/c/
+    - assets/dictionary/d/
+    - assets/dictionary/e/
+    - assets/dictionary/f/
+    - assets/dictionary/g/
+    - assets/dictionary/h/
+    - assets/dictionary/i/
+    - assets/dictionary/j/
+    - assets/dictionary/k/
+    - assets/dictionary/l/
+    - assets/dictionary/m/
+    - assets/dictionary/n/
+    - assets/dictionary/o/
+    - assets/dictionary/p/
+    - assets/dictionary/q/
+    - assets/dictionary/r/
+    - assets/dictionary/s/
+    - assets/dictionary/t/
+    - assets/dictionary/u/
+    - assets/dictionary/v/
+    - assets/dictionary/w/
+    - assets/dictionary/x/
+    - assets/dictionary/y/
+    - assets/dictionary/z/
+
+    - assets/dictionary/valid_words.json
+    - assets/gobot.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/hololingo.png"

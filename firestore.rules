@@ -59,5 +59,14 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if false;
     }
+    match /events/{eventId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+
+      match /targets/{targetId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
   }
 }
