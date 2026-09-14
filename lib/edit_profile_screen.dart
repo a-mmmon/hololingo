@@ -17,25 +17,12 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameController = TextEditingController();
   final _cityController = TextEditingController();
-  String _selectedLanguage = 'English (US)';
   bool _isSaving = false;
   bool _isLoading = true;
   bool _isUploadingPhoto = false;
 
   File? _pickedPhoto;
   String? _photoUrl;
-
-  final List<String> _languages = [
-    'English (US)',
-    'English (UK)',
-    'Thai',
-    'Japanese',
-    'Chinese',
-    'Korean',
-    'French',
-    'Spanish',
-    'German',
-  ];
 
   @override
   void initState() {
@@ -49,7 +36,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() {
       _nameController.text = data['name'] ?? '';
       _cityController.text = data['city'] ?? 'Bangkok';
-      _selectedLanguage = data['language'] ?? 'English (US)';
       _photoUrl = data['photo_url']?.toString();
       _isLoading = false;
     });
@@ -127,7 +113,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await FirestoreService.updateProfile({
         'name': _nameController.text.trim(),
         'city': _cityController.text.trim(),
-        'language': _selectedLanguage,
         if (photoUrl != null) 'photo_url': photoUrl,
       });
     } catch (e) {
@@ -194,8 +179,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             onTap: (_isSaving || _isUploadingPhoto) ? null : _saveProfile,
             child: Container(
               margin: const EdgeInsets.all(8),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.cyan,
                 borderRadius: BorderRadius.circular(12),
@@ -335,48 +319,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     dark: dark,
                   ),
 
-                  const SizedBox(height: 20),
-
-                  _FieldLabel('Target Language', dark),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.card(dark),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border(dark)),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedLanguage,
-                        isExpanded: true,
-                        dropdownColor: AppColors.card(dark),
-                        icon: Icon(Icons.keyboard_arrow_down_rounded,
-                            color: AppColors.textSecondary(dark)),
-                        items: _languages
-                            .map((lang) => DropdownMenuItem(
-                                  value: lang,
-                                  child: Text(lang,
-                                      style: TextStyle(
-                                          color:
-                                              AppColors.textPrimary(dark),
-                                          fontSize: 15)),
-                                ))
-                            .toList(),
-                        onChanged: (v) =>
-                            setState(() => _selectedLanguage = v!),
-                      ),
-                    ),
-                  ),
-
                   const SizedBox(height: 40),
 
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed:
-                          (_isSaving || _isUploadingPhoto) ? null : _saveProfile,
+                      onPressed: (_isSaving || _isUploadingPhoto)
+                          ? null
+                          : _saveProfile,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.cyan,
                         foregroundColor: Colors.black,
@@ -392,8 +342,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   color: Colors.black, strokeWidth: 2))
                           : const Text('Save Changes',
                               style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16)),
+                                  fontWeight: FontWeight.w700, fontSize: 16)),
                     ),
                   ),
                 ],

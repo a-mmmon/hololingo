@@ -17,7 +17,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String _name = '';
   String _city = '';
-  String _language = 'English (US)';
 
   int _tokens = 0;
   int _wordsSaved = 0;
@@ -57,7 +56,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _name = data['name'] ?? 'User';
         _city = data['city'] ?? '';
-        _language = data['language'] ?? 'English (US)';
 
         _tokens = data['tokens'] ?? 0;
 

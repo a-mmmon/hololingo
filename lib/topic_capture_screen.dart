@@ -509,7 +509,16 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        CameraPreview(controller),
+        Positioned.fill(
+          child: ClipRect(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: controller.value.aspectRatio,
+                child: CameraPreview(controller),
+              ),
+            ),
+          ),
+        ),
         Align(
           alignment: Alignment.topCenter,
           child: Container(
@@ -1056,8 +1065,8 @@ class _TargetFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 260,
-      height: 300,
+      width: 320,
+      height: 400,
       child: Stack(
         children: [
           _Corner(

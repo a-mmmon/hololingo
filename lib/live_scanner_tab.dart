@@ -9,6 +9,7 @@ import 'app_theme.dart';
 import 'ar_anchor_screen.dart';
 import 'detector_service.dart';
 import 'dictionary_service.dart';
+import 'firestore_service.dart';
 
 class LiveScannerTab extends StatefulWidget {
   final VoidCallback? onBackToHome;
@@ -408,12 +409,12 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     // Save the most recent preview frame and create the transparent cutout.
     // This avoids controller.takePicture(), which triggers the OS camera
     // shutter sound and makes scanning feel like a manual "capture" action.
-    await _captureDetectedImage();
+    await _captureDetectedImage(word);
 
     await _handleDetectedWord(word);
   }
 
-  Future<void> _captureDetectedImage() async {
+  Future<void> _captureDetectedImage(String word) async {
     final frame = _lastCameraImage;
 
     if (frame == null) {
@@ -449,7 +450,10 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
       // Do NOT fall back to the raw frame. A full frame would put the
       // bed/wall/background into the AR plane.
-      _lastImagePath = cutout;
+      _lastImagePath = await DetectorService.persistCutout(
+        cutout,
+        word: word,
+      );
 
       debugPrint('Scanner cutout: $_lastImagePath');
     } catch (e) {
@@ -486,6 +490,16 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         _example = info['example']?.toString() ?? '';
       });
 
+      try {
+        await FirestoreService.recordScan(
+          word: _detectedWord,
+          definition: _definition,
+          phonetic: _phonetic,
+        );
+      } catch (e) {
+        debugPrint('Could not record AR scan: $e');
+      }
+
       await _openArAutomatically();
     } catch (e) {
       debugPrint(
@@ -503,6 +517,15 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         _definition = 'Definition is not available yet.';
         _example = '';
       });
+
+      try {
+        await FirestoreService.recordScan(
+          word: word,
+          definition: _definition,
+        );
+      } catch (recordError) {
+        debugPrint('Could not record AR scan: $recordError');
+      }
 
       await _openArAutomatically();
     }

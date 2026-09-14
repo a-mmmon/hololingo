@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 /// ============================================================================
@@ -93,6 +94,41 @@ class DetectorService {
   // Native iOS Vision foreground-segmentation bridge.
   static const MethodChannel _visionChannel = MethodChannel('hololingo/vision');
 
+  static Future<String?> persistCutout(
+    String? sourcePath, {
+    required String word,
+  }) async {
+    if (sourcePath == null || sourcePath.isEmpty) return null;
+
+    final source = File(sourcePath);
+    if (!await source.exists()) return null;
+
+    try {
+      final supportDirectory = await getApplicationSupportDirectory();
+      final directory = Directory(
+        '${supportDirectory.path}/topic_cutouts',
+      );
+      await directory.create(recursive: true);
+
+      if (sourcePath.startsWith('${directory.path}/')) {
+        return sourcePath;
+      }
+
+      final safeWord = word.toLowerCase().replaceAll(
+            RegExp(r'[^a-z0-9]+'),
+            '_',
+          );
+      final destination = File(
+        '${directory.path}/${safeWord}_${DateTime.now().microsecondsSinceEpoch}.png',
+      );
+      await source.copy(destination.path);
+      return destination.path;
+    } catch (e) {
+      debugPrint('DetectorService: could not persist cutout: $e');
+      return null;
+    }
+  }
+
   static Interpreter? _interpreter;
 
   static bool _isLoaded = false;
@@ -102,8 +138,8 @@ class DetectorService {
   static const int _inputSize = 640;
 
   /// Output tensor is [1, 64, 8400]: 4 box values + 60 class scores.
-  static const int _numClasses = 60;
-  static const int _numAnchors = 8400;
+  static int _modelNumClasses = 60;
+  static int _modelNumAnchors = 8400;
 
   /// Minimum confidence required before the app accepts a detection.
   ///
@@ -197,17 +233,44 @@ class DetectorService {
         'assets/Models/best.tflite',
       );
 
+      final inputShape = _interpreter!.getInputTensor(0).shape;
+      final outputShape = _interpreter!.getOutputTensor(0).shape;
+
+      if (outputShape.length != 3 || outputShape[0] != 1) {
+        throw StateError(
+          'Unexpected detector output shape: $outputShape',
+        );
+      }
+
+      // Ultralytics exports [1, 4 + classes, anchors].
+      if (outputShape[2] <= outputShape[1] || outputShape[1] < 5) {
+        throw StateError(
+          'Unsupported detector output layout: $outputShape',
+        );
+      }
+
+      _modelNumClasses = outputShape[1] - 4;
+      _modelNumAnchors = outputShape[2];
+
       _isLoaded = true;
 
       debugPrint(
         'DetectorService: model loaded '
-        '(${_labels.length} labels)',
+        '(output=$outputShape, $_modelNumClasses classes, '
+        '${_labels.length} configured labels)',
       );
 
       debugPrint(
-        'DetectorService: input size '
-        '$_inputSize x $_inputSize',
+        'DetectorService: input shape $inputShape',
       );
+
+      if (_modelNumClasses != _labels.length) {
+        debugPrint(
+          'DetectorService: WARNING model has $_modelNumClasses classes, '
+          'but the app has ${_labels.length} labels. '
+          'Use the exact names/order from the training data.',
+        );
+      }
     } catch (e) {
       _loadFailed = true;
 
@@ -654,8 +717,8 @@ class DetectorService {
 
     final output = [
       List.generate(
-        4 + _numClasses,
-        (_) => List.filled(_numAnchors, 0.0),
+        4 + _modelNumClasses,
+        (_) => List.filled(_modelNumAnchors, 0.0),
       ),
     ];
 
@@ -675,11 +738,11 @@ class DetectorService {
     int bestClass = -1;
     double bestCx = 0, bestCy = 0, bestW = 0, bestH = 0;
 
-    for (int a = 0; a < _numAnchors; a++) {
+    for (int a = 0; a < _modelNumAnchors; a++) {
       // Class scores start at row index 4.
-      for (int c = 0; c < _numClasses; c++) {
+      for (int c = 0; c < _modelNumClasses; c++) {
         final score = raw[4 + c][a];
-        final modelLabel = _labels[c];
+        final modelLabel = c < _labels.length ? _labels[c] : 'class_$c';
 
         if (normalizedTarget != null &&
             !_targetMatchesModelLabel(normalizedTarget, modelLabel)) {
@@ -719,7 +782,8 @@ class DetectorService {
       return null;
     }
 
-    final label = _labels[bestClass];
+    final label =
+        bestClass < _labels.length ? _labels[bestClass] : 'class_$bestClass';
 
     // -------------------------------------------------------------------------
     // IMPORTANT: this Ultralytics TFLite export contains the NormalizeCoords
