@@ -1,12 +1,21 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+
 import 'app_theme.dart';
 import 'firestore_service.dart';
 import 'topics_data.dart';
 import 'topic_complete_screen.dart';
+import 'topic_capture_screen.dart';
 
 class TopicWordGridScreen extends StatefulWidget {
   final TopicDef topic;
-  const TopicWordGridScreen({super.key, required this.topic});
+
+  const TopicWordGridScreen({
+    super.key,
+    required this.topic,
+  });
 
   @override
   State<TopicWordGridScreen> createState() => _TopicWordGridScreenState();
@@ -14,8 +23,10 @@ class TopicWordGridScreen extends StatefulWidget {
 
 class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
   Set<String> _learned = {};
+  Map<String, String> _imagePaths = {};
+
   bool _loading = true;
-  bool _changed = false; // tells TopicsScreen to refresh on pop
+  bool _changed = false;
 
   @override
   void initState() {
@@ -25,56 +36,184 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
   Future<void> _load() async {
     try {
-      final progress = await FirestoreService.getTopicProgress();
-      final learned = (progress[widget.topic.id] as List?)?.cast<String>() ?? [];
+      final results = await Future.wait([
+        FirestoreService.getTopicProgress(),
+        FirestoreService.getSavedWords(),
+      ]);
+
+      final progress = results[0] as Map<String, dynamic>;
+      final savedWords = results[1] as List<Map<String, dynamic>>;
+
+      final learned = (progress[widget.topic.id] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
+
       if (!mounted) return;
+
+      final imagePaths = <String, String>{};
+      for (final savedWord in savedWords) {
+        final word = (savedWord['word'] ?? '').toString().toLowerCase();
+        final imagePath = (savedWord['image_path'] ?? '').toString();
+        if (word.isNotEmpty && imagePath.isNotEmpty) {
+          imagePaths[word] = imagePath;
+        }
+      }
+
       setState(() {
         _learned = learned.toSet();
+        _imagePaths = imagePaths;
         _loading = false;
       });
     } catch (e) {
-      debugPrint('TopicWordGridScreen load error: $e');
-      if (mounted) setState(() => _loading = false);
+      debugPrint(
+        'TopicWordGridScreen load error: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
-  Future<void> _tapWord(TopicWord word) async {
-    if (_learned.contains(word.word)) return; // already learned
-    // Only the next-in-line word is tappable, to keep a linear learning order.
-    final nextIndex = _learned.length;
-    final wordIndex = widget.topic.words.indexOf(word);
-    if (wordIndex != nextIndex) return;
+  // ============================================================
+  // TAP WORD
+  // ============================================================
 
-    final learnedNow = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _WordCardSheet(word: word, topicColor: widget.topic.color),
+  Future<void> _tapWord(TopicWord word) async {
+    if (_learned.contains(word.word)) {
+      return;
+    }
+
+    // ==========================================================
+    // OPEN CAMERA CAPTURE SCREEN
+    // ==========================================================
+
+    final result = await Navigator.push<TopicCaptureResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TopicCaptureScreen(
+          word: word,
+          topicColor: widget.topic.color,
+        ),
+      ),
     );
-    if (learnedNow != true) return;
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    // The word was successfully scanned.
+    if (!result.success) {
+      return;
+    }
+
+    final imagePath = await _persistImage(result.imagePath, word.word);
+
+    // ==========================================================
+    // SAVE PROGRESS
+    // ==========================================================
 
     try {
-      await FirestoreService.markWordLearned(widget.topic.id, word.word);
+      await FirestoreService.saveWord({
+        'word': word.word,
+        'image_path': imagePath ?? '',
+      });
+
+      await FirestoreService.markWordLearned(
+        widget.topic.id,
+        word.word,
+      );
     } catch (e) {
-      debugPrint('markWordLearned error: $e');
+      debugPrint(
+        'markWordLearned error: $e',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save your progress.',
+          ),
+        ),
+      );
+
+      return;
     }
-    _changed = true;
-    setState(() => _learned.add(word.word));
+
+    if (!mounted) return;
+
+    setState(() {
+      _learned.add(word.word);
+      if (imagePath != null) {
+        _imagePaths[word.word.toLowerCase()] = imagePath;
+      }
+      _changed = true;
+    });
+
+    // ==========================================================
+    // TOPIC COMPLETE
+    // ==========================================================
 
     if (_learned.length >= widget.topic.words.length) {
       await _completeTopic();
     }
   }
 
+  Future<String?> _persistImage(String? sourcePath, String word) async {
+    if (sourcePath == null || sourcePath.isEmpty) {
+      return null;
+    }
+
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      return null;
+    }
+
+    try {
+      final supportDirectory = await getApplicationSupportDirectory();
+      final cutoutDirectory = Directory(
+        '${supportDirectory.path}/topic_cutouts',
+      );
+      await cutoutDirectory.create(recursive: true);
+
+      final safeWord =
+          word.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+      final destination = File(
+        '${cutoutDirectory.path}/${safeWord}_${DateTime.now().microsecondsSinceEpoch}.png',
+      );
+      await source.copy(destination.path);
+      return destination.path;
+    } catch (e) {
+      debugPrint('Could not persist topic cutout: $e');
+      return null;
+    }
+  }
+
+  // ============================================================
+  // COMPLETE TOPIC
+  // ============================================================
+
   Future<void> _completeTopic() async {
     const tokens = 10;
     const xp = 100;
+
     try {
-      await FirestoreService.addRewards(tokens: tokens, xp: xp);
+      await FirestoreService.addRewards(
+        tokens: tokens,
+        xp: xp,
+      );
     } catch (e) {
-      debugPrint('addRewards error: $e');
+      debugPrint(
+        'addRewards error: $e',
+      );
     }
+
     if (!mounted) return;
+
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -86,195 +225,365 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
         ),
       ),
     );
-    if (mounted) Navigator.pop(context, true);
+
+    if (mounted) {
+      Navigator.pop(
+        context,
+        true,
+      );
+    }
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
+
     final total = widget.topic.words.length;
+
     final done = _learned.length;
 
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, _) {},
-      child: Scaffold(
-        backgroundColor: AppColors.bg(dark),
-        body: SafeArea(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.cyan))
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(Icons.arrow_back_rounded,
-                                color: AppColors.textPrimary(dark)),
-                            onPressed: () => Navigator.pop(context, _changed),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(widget.topic.name,
-                                    style: TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.textPrimary(dark))),
-                                Text('$total words · $done done',
-                                    style: TextStyle(
-                                        color: AppColors.textSecondary(dark), fontSize: 13)),
-                              ],
+    return Scaffold(
+      backgroundColor: AppColors.bg(dark),
+      body: SafeArea(
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.cyan,
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ==================================================
+                  // HEADER
+                  // ==================================================
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      16,
+                      8,
+                      16,
+                      0,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.arrow_back_rounded,
+                            color: AppColors.textPrimary(
+                              dark,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: total == 0 ? 0 : done / total,
-                          backgroundColor: AppColors.secondary(dark),
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyan),
-                          minHeight: 6,
+                          onPressed: () {
+                            Navigator.pop(
+                              context,
+                              _changed,
+                            );
+                          },
                         ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 14,
-                          childAspectRatio: 0.95,
-                        ),
-                        itemCount: total,
-                        itemBuilder: (context, i) {
-                          final word = widget.topic.words[i];
-                          final isLearned = _learned.contains(word.word);
-                          final isNext = i == _learned.length;
-                          final locked = !isLearned && !isNext;
-                          return GestureDetector(
-                            onTap: locked ? null : () => _tapWord(word),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.card(dark),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: isLearned
-                                      ? Colors.green
-                                      : isNext
-                                          ? widget.topic.color
-                                          : AppColors.border(dark),
-                                  width: 1.5,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.topic.name,
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary(
+                                    dark,
+                                  ),
                                 ),
                               ),
-                              padding: const EdgeInsets.all(8),
-                              child: Center(
-                                child: locked
-                                    ? Icon(Icons.lock_rounded,
-                                        color: AppColors.textTertiary(dark), size: 20)
-                                    : Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(word.word,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                  color: isLearned
-                                                      ? Colors.green
-                                                      : AppColors.textPrimary(dark))),
-                                          const SizedBox(height: 3),
-                                          Text(word.translation,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: AppColors.textSecondary(dark))),
-                                        ],
-                                      ),
+                              const SizedBox(
+                                height: 3,
                               ),
+                              Text(
+                                '$total words · $done done',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(
+                                    dark,
+                                  ),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ==================================================
+                  // PROGRESS
+                  // ==================================================
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: LinearProgressIndicator(
+                        value: total == 0 ? 0 : done / total,
+                        backgroundColor: AppColors.secondary(
+                          dark,
+                        ),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.cyan,
+                        ),
+                        minHeight: 7,
+                      ),
+                    ),
+                  ),
+
+                  // ==================================================
+                  // 9 WORDS / 3 x 3 GRID
+                  // ==================================================
+
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        20,
+                        4,
+                        20,
+                        16,
+                      ),
+                      child: LayoutBuilder(
+                        builder: (
+                          context,
+                          constraints,
+                        ) {
+                          const columns = 3;
+                          const rows = 3;
+                          const spacing = 12.0;
+
+                          final tileHeight =
+                              (constraints.maxHeight - spacing * (rows - 1)) /
+                                  rows;
+
+                          return GridView.builder(
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              crossAxisSpacing: spacing,
+                              mainAxisSpacing: spacing,
+                              mainAxisExtent: tileHeight,
                             ),
+                            itemCount: total > 9 ? 9 : total,
+                            itemBuilder: (
+                              context,
+                              index,
+                            ) {
+                              final word = widget.topic.words[index];
+
+                              final learned = _learned.contains(
+                                word.word,
+                              );
+
+                              final imagePath =
+                                  _imagePaths[word.word.toLowerCase()];
+
+                              final isNext = index == _learned.length;
+
+                              return _WordTile(
+                                word: word,
+                                learned: learned,
+                                isNext: isNext,
+                                imagePath: imagePath,
+                                topicColor: widget.topic.color,
+                                dark: dark,
+                                onTap: () => _tapWord(
+                                  word,
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context, _changed),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: AppColors.cyan),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
+                  ),
+
+                  // ==================================================
+                  // BACK BUTTON
+                  // ==================================================
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      16,
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(
+                            context,
+                            _changed,
+                          );
+                        },
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(
+                            color: AppColors.cyan,
                           ),
-                          child: const Text('Back to Topics',
-                              style: TextStyle(
-                                  color: AppColors.cyan,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15)),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              14,
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          'Back to Topics',
+                          style: TextStyle(
+                            color: AppColors.cyan,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ),
-                  ],
-                ),
-        ),
+                  ),
+                ],
+              ),
       ),
     );
   }
 }
 
-// Simple learn-card shown when tapping the next unlearned word.
-class _WordCardSheet extends StatelessWidget {
+// ================================================================
+// WORD TILE
+// ================================================================
+
+class _WordTile extends StatelessWidget {
   final TopicWord word;
+  final bool learned;
+  final bool isNext;
+  final String? imagePath;
   final Color topicColor;
-  const _WordCardSheet({required this.word, required this.topicColor});
+  final bool dark;
+  final VoidCallback? onTap;
+
+  const _WordTile({
+    required this.word,
+    required this.learned,
+    required this.isNext,
+    required this.imagePath,
+    required this.topicColor,
+    required this.dark,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C22),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+    final borderColor = learned
+        ? Colors.green
+        : isNext
+            ? topicColor
+            : AppColors.border(dark);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: AppColors.card(dark),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: borderColor,
+            width: isNext ? 2 : 1.3,
           ),
-          Text(word.word,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white)),
-          const SizedBox(height: 6),
-          Text(word.translation, style: TextStyle(fontSize: 16, color: topicColor)),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: topicColor,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          boxShadow: isNext
+              ? [
+                  BoxShadow(
+                    color: topicColor.withValues(
+                      alpha: 0.15,
+                    ),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        padding: const EdgeInsets.all(7),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (learned && imagePath != null && File(imagePath!).existsSync())
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Image.file(
+                      File(imagePath!),
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  word.word,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 19,
+                    color: learned
+                        ? Colors.green
+                        : AppColors.textPrimary(
+                            dark,
+                          ),
+                  ),
+                ),
+
+              const SizedBox(
+                height: 5,
               ),
-              child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.w700)),
-            ),
+
+              // Translation
+              Text(
+                word.translation,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary(
+                    dark,
+                  ),
+                ),
+              ),
+
+              const SizedBox(
+                height: 8,
+              ),
+
+              if (learned)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.green,
+                  size: 21,
+                )
+              else
+                Icon(
+                  Icons.photo_camera_rounded,
+                  color: topicColor,
+                  size: 21,
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

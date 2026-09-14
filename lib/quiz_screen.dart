@@ -1,321 +1,543 @@
-import 'dart:io';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
-import 'firestore_service.dart';
+
 import 'app_theme.dart';
+import 'firestore_service.dart';
 
 class QuizScreen extends StatefulWidget {
   const QuizScreen({super.key});
+
   @override
-  _QuizScreenState createState() => _QuizScreenState();
+  State<QuizScreen> createState() => _QuizScreenState();
+}
+
+enum _QuizDirection { engToThai, thaiToEng }
+
+class _QuizQuestion {
+  final _QuizDirection direction;
+  final String prompt;
+  final String correctAnswer;
+  final List<String> options;
+
+  const _QuizQuestion({
+    required this.direction,
+    required this.prompt,
+    required this.correctAnswer,
+    required this.options,
+  });
 }
 
 class _QuizScreenState extends State<QuizScreen> {
-  int _currentQuestion = 0, _score = 0;
-  bool _answered = false, _loading = true;
-  int? _selectedIndex;
-  List<Map<String, dynamic>> _questions = [];
+  final Random _random = Random();
+  List<_QuizQuestion> _questions = [];
+  int _index = 0;
+  int _score = 0;
+  String? _selected;
+  bool _loading = true;
+  bool _finished = false;
 
-  final List<Map<String, dynamic>> _staticQuestions = [
-    {'emoji': '📖', 'image_path': null, 'correct': 'Book',
-      'options': ['Book', 'Notebook', 'Magazine', 'Folder'], 'definition': 'A set of written or printed pages'},
-    {'emoji': '🪑', 'image_path': null, 'correct': 'Chair',
-      'options': ['Table', 'Chair', 'Desk', 'Stool'], 'definition': 'A seat with a back and legs'},
-    {'emoji': '🍶', 'image_path': null, 'correct': 'Bottle',
-      'options': ['Bottle', 'Cup', 'Bowl', 'Jar'], 'definition': 'A container for liquids'},
-    {'emoji': '🖥️', 'image_path': null, 'correct': 'Monitor',
-      'options': ['Television', 'Monitor', 'Projector', 'Screen'], 'definition': 'A display screen for a computer'},
-    {'emoji': '🌿', 'image_path': null, 'correct': 'Plant',
-      'options': ['Flower', 'Tree', 'Plant', 'Grass'], 'definition': 'A living organism that grows in soil'},
-  ];
-
-  String _wordToEmoji(String word) {
-    const map = {
-      'book': '📖', 'desk': '🪑', 'cup': '☕', 'chair': '🪑', 'phone': '📱',
-      'pen': '✏️', 'laptop': '💻', 'bottle': '🍶', 'bag': '👜', 'clock': '🕐',
-      'plant': '🌿', 'monitor': '🖥️', 'keyboard': '⌨️', 'mouse': '🖱️',
-      'lamp': '💡', 'window': '🪟', 'door': '🚪', 'table': '🪵',
-    };
-    return map[word.toLowerCase()] ?? '🔍';
-  }
-
-  List<String> _generateOptions(String correct, List<String> allWords) {
-    final pool = <String>[
-      'Book', 'Chair', 'Cup', 'Desk', 'Phone', 'Pen', 'Laptop', 'Bottle',
-      'Bag', 'Clock', 'Plant', 'Monitor', 'Keyboard', 'Mouse', 'Lamp',
-    ].where((w) => w.toLowerCase() != correct.toLowerCase()).toList();
-    for (final w in allWords) {
-      final cap = _capitalize(w);
-      if (w.toLowerCase() != correct.toLowerCase() && !pool.contains(cap)) pool.add(cap);
-    }
-    pool.shuffle();
-    return [...pool.take(3), _capitalize(correct)]..shuffle();
-  }
-
-  String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  // Thai translations for words the app can detect/save. Only words in
+  // here are eligible for quiz questions.
+  static const Map<String, String> _thaiDictionary = {
+    'book': 'หนังสือ',
+    'bottle': 'ขวด',
+    'chair': 'เก้าอี้',
+    'laptop': 'แล็ปท็อป',
+    'cell phone': 'โทรศัพท์มือถือ',
+    'phone': 'โทรศัพท์',
+    'clock': 'นาฬิกา',
+    'remote': 'รีโมต',
+    'vase': 'แจกัน',
+    'scissors': 'กรรไกร',
+    'cup': 'ถ้วย',
+    'bed': 'เตียง',
+    'plant': 'ต้นไม้',
+    'flower': 'ดอกไม้',
+    'table': 'โต๊ะ',
+    'desk': 'โต๊ะทำงาน',
+    'pen': 'ปากกา',
+    'pencil': 'ดินสอ',
+    'suitcase': 'กระเป๋าเดินทาง',
+    'bag': 'กระเป๋า',
+    'backpack': 'กระเป๋าเป้',
+    'keyboard': 'แป้นพิมพ์',
+    'mouse': 'เมาส์',
+    'monitor': 'จอภาพ',
+    'lamp': 'โคมไฟ',
+    'shoe': 'รองเท้า',
+    'umbrella': 'ร่ม',
+    'bowl': 'ชาม',
+    'car': 'รถยนต์',
+    'dog': 'สุนัข',
+    'cat': 'แมว',
+    'bird': 'นก',
+    'horse': 'ม้า',
+    'sheep': 'แกะ',
+    'cow': 'วัว',
+    'elephant': 'ช้าง',
+    'bear': 'หมี',
+    'zebra': 'ม้าลาย',
+    'giraffe': 'ยีราฟ',
+    'couch': 'โซฟา',
+    'dining table': 'โต๊ะรับประทานอาหาร',
+    'bench': 'ม้านั่ง',
+    'apple': 'แอปเปิล',
+    'banana': 'กล้วย',
+    'orange': 'ส้ม',
+    'pizza': 'พิซซ่า',
+    'cake': 'เค้ก',
+    'sandwich': 'แซนด์วิช',
+    'hot dog': 'ฮอตดอก',
+    'broccoli': 'บรอกโคลี',
+    'carrot': 'แครอท',
+    'donut': 'โดนัท',
+    'bicycle': 'จักรยาน',
+    'motorcycle': 'รถจักรยานยนต์',
+    'airplane': 'เครื่องบิน',
+    'bus': 'รถบัส',
+    'train': 'รถไฟ',
+    'truck': 'รถบรรทุก',
+    'boat': 'เรือ',
+    'watch': 'นาฬิกาข้อมือ',
+    'jacket': 'แจ็คเก็ต',
+    'sunglasses': 'แว่นกันแดด',
+    'tissue': 'ทิชชู่',
+    'toothbrush': 'แปรงสีฟัน',
+    'laptop charger': 'ที่ชาร์จแล็ปท็อป',
+    'charger': 'ที่ชาร์จ',
+    'usb': 'ยูเอสบี',
+    'sensor': 'เซนเซอร์',
+    'camera': 'กล้อง',
+    'calculator': 'เครื่องคิดเลข',
+  };
 
   @override
-  void initState() { super.initState(); _loadQuestions(); }
-
-  Future<void> _loadQuestions() async {
-    setState(() => _loading = true);
-    final saved = await DatabaseService.getSavedWords();
-    if (saved.isNotEmpty) {
-      final allWords = saved.map((w) => w['word'] as String).toList();
-      saved.shuffle();
-      _questions = saved.take(5).map((w) {
-        final word = w['word'] as String;
-        final imgPath = w['image_path'] as String?;
-        return {
-          'emoji': _wordToEmoji(word),
-          'image_path': (imgPath != null && imgPath.isNotEmpty) ? imgPath : null,
-          'correct': _capitalize(word),
-          'options': _generateOptions(word, allWords),
-          'definition': w['definition'] ?? '',
-        };
-      }).toList();
-    } else {
-      _questions = List.from(_staticQuestions);
-    }
-    if (mounted) setState(() => _loading = false);
+  void initState() {
+    super.initState();
+    _loadQuiz();
   }
 
-  void _answer(int index) {
-    if (_answered) return;
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  Future<void> _loadQuiz() async {
+    try {
+      final words = await FirestoreService.getSavedWords();
+      final saved = words
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((e) => (e['word'] ?? '').toString().trim().isNotEmpty)
+          .toList();
+
+      // Saved words that have a known Thai translation.
+      final translatableKeys = saved
+          .map((e) => e['word'].toString().trim().toLowerCase())
+          .where((key) => _thaiDictionary.containsKey(key))
+          .toSet();
+
+      // Pad with dictionary words the user hasn't saved yet, so there's
+      // still a full quiz even with few saved+translated words.
+      final fillerKeys = _thaiDictionary.keys
+          .where((k) => !translatableKeys.contains(k))
+          .toList()
+        ..shuffle(_random);
+
+      final pool = [...translatableKeys, ...fillerKeys];
+      pool.shuffle(_random);
+
+      final count = min(5, pool.length);
+      final questions = <_QuizQuestion>[];
+
+      for (int i = 0; i < count; i++) {
+        final key = pool[i];
+        final thai = _thaiDictionary[key]!;
+        final englishWord = _capitalize(key);
+
+        final direction = _random.nextBool()
+            ? _QuizDirection.engToThai
+            : _QuizDirection.thaiToEng;
+
+        final otherKeys =
+            _thaiDictionary.keys.where((k) => k != key).toList()
+              ..shuffle(_random);
+
+        late final String prompt;
+        late final String correctAnswer;
+        late final List<String> options;
+
+        if (direction == _QuizDirection.engToThai) {
+          prompt = englishWord;
+          correctAnswer = thai;
+          options = [
+            thai,
+            ...otherKeys.take(3).map((k) => _thaiDictionary[k]!),
+          ];
+        } else {
+          prompt = thai;
+          correctAnswer = englishWord;
+          options = [
+            englishWord,
+            ...otherKeys.take(3).map((k) => _capitalize(k)),
+          ];
+        }
+
+        options.shuffle(_random);
+
+        questions.add(_QuizQuestion(
+          direction: direction,
+          prompt: prompt,
+          correctAnswer: correctAnswer,
+          options: options,
+        ));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _questions = questions;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('Quiz load error: $e');
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  void _answer(String option) {
+    if (_selected != null || _finished || _questions.isEmpty) return;
+
+    final correct = _questions[_index].correctAnswer;
     setState(() {
-      _answered = true; _selectedIndex = index;
-      if ((_questions[_currentQuestion]['options'] as List)[index] ==
-          _questions[_currentQuestion]['correct']) _score++;
-    });
-    Future.delayed(const Duration(milliseconds: 1100), () {
-      if (mounted) _next();
+      _selected = option;
+      if (option == correct) _score++;
     });
   }
 
   void _next() {
-    if (_currentQuestion < _questions.length - 1) {
-      setState(() { _currentQuestion++; _answered = false; _selectedIndex = null; });
-    } else {
-      _showResult();
+    if (_selected == null) return;
+
+    if (_index + 1 >= _questions.length) {
+      setState(() => _finished = true);
+      return;
     }
+
+    setState(() {
+      _index++;
+      _selected = null;
+    });
   }
 
-  void _showResult() {
-    final dark = ThemeProvider.isDark(context);
-    showDialog(
-      context: context, barrierDismissible: false, barrierColor: Colors.black87,
-      builder: (_) => Dialog(
-        backgroundColor: AppColors.card(dark),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('🎉', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text('Quiz Complete!', style: TextStyle(
-              fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary(dark))),
-            const SizedBox(height: 8),
-            Text('$_score / ${_questions.length}', style: const TextStyle(
-              fontSize: 40, fontWeight: FontWeight.w900, color: AppColors.cyan)),
-            const SizedBox(height: 6),
-            Text(_score == _questions.length ? 'Perfect score! 🔥' : 'Keep scanning to learn more!',
-              style: TextStyle(color: AppColors.textSecondary(dark))),
-            const SizedBox(height: 24),
-            Row(children: [
-              Expanded(child: OutlinedButton(
-                onPressed: () { Navigator.pop(context); Navigator.pop(context); },
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppColors.border(dark)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: Text('Exit', style: TextStyle(color: AppColors.textPrimary(dark))),
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  setState(() { _currentQuestion = 0; _score = 0; _answered = false; _selectedIndex = null; });
-                  _loadQuestions();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.cyan, foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14)),
-                child: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.w700)),
-              )),
-            ]),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuestionVisual(Map<String, dynamic> question, bool dark) {
-    final imagePath = question['image_path'] as String?;
-    if (_answered) {
-      if (imagePath != null) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.file(File(imagePath), fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Text(question['emoji'] as String,
-              style: const TextStyle(fontSize: 64))));
-      }
-      return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(question['emoji'] as String, style: const TextStyle(fontSize: 64)),
-        Text(question['correct'] as String, style: const TextStyle(
-          color: AppColors.cyan, fontSize: 14, fontWeight: FontWeight.w700)),
-      ]);
-    }
-    if (imagePath != null) {
-      return Stack(fit: StackFit.expand, children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.file(File(imagePath), fit: BoxFit.cover,
-            color: Colors.black.withValues(alpha: 0.55), colorBlendMode: BlendMode.darken,
-            errorBuilder: (_, __, ___) => const SizedBox())),
-        const Center(child: Text('?', style: TextStyle(
-          fontSize: 64, color: AppColors.cyan, fontWeight: FontWeight.w900))),
-      ]);
-    }
-    return const Center(child: Text('?', style: TextStyle(
-      fontSize: 64, color: AppColors.cyan, fontWeight: FontWeight.w900)));
+  void _restart() {
+    setState(() {
+      _loading = true;
+      _finished = false;
+      _index = 0;
+      _score = 0;
+      _selected = null;
+    });
+    _loadQuiz();
   }
 
   @override
   Widget build(BuildContext context) {
     final dark = ThemeProvider.isDark(context);
-    if (_loading) return Scaffold(backgroundColor: AppColors.bg(dark),
-      body: const Center(child: CircularProgressIndicator(color: AppColors.cyan)));
 
-    final question = _questions[_currentQuestion];
-    final total = _questions.length;
-    final letters = ['A', 'B', 'C', 'D'];
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: AppColors.bg(dark),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.cyan),
+        ),
+      );
+    }
+
+    if (_questions.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.bg(dark),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.quiz_rounded, color: AppColors.cyan, size: 60),
+                  const SizedBox(height: 18),
+                  Text(
+                    'No quiz words yet',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(dark),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scan and save some objects first.',
+                    style: TextStyle(color: AppColors.textSecondary(dark)),
+                  ),
+                  const SizedBox(height: 22),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Back'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_finished) return _buildResult(dark);
+
+    final question = _questions[_index];
+    final instruction = question.direction == _QuizDirection.engToThai
+        ? 'Choose the correct Thai translation'
+        : 'Choose the correct English word';
 
     return Scaffold(
       backgroundColor: AppColors.bg(dark),
       body: SafeArea(
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Row(children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(width: 40, height: 40,
-                  decoration: BoxDecoration(color: AppColors.card(dark),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border(dark))),
-                  child: Icon(Icons.arrow_back_ios_new_rounded,
-                    color: AppColors.textPrimary(dark), size: 18)),
-              ),
-              const Spacer(),
-              Text('${_currentQuestion + 1} / $total', style: TextStyle(
-                color: AppColors.textSecondary(dark), fontSize: 14, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              const SizedBox(width: 40),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: (_currentQuestion + 1) / total,
-                backgroundColor: AppColors.secondary(dark),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cyan),
-                minHeight: 5),
-            ),
-          ),
-          const SizedBox(height: 32),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            margin: const EdgeInsets.symmetric(horizontal: 48),
-            height: 160,
-            decoration: BoxDecoration(
-              color: AppColors.card(dark), borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _answered
-                  ? ((_questions[_currentQuestion]['options'] as List)[_selectedIndex ?? 0] ==
-                      _questions[_currentQuestion]['correct'] ? Colors.green : Colors.redAccent)
-                  : AppColors.cyan,
-                width: 2),
-              boxShadow: [BoxShadow(color: AppColors.shadow(dark), blurRadius: 8)],
-            ),
-            child: _buildQuestionVisual(question, dark),
-          ),
-          const SizedBox(height: 28),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text('What is this object called?', style: TextStyle(
-              color: AppColors.textPrimary(dark), fontSize: 20, fontWeight: FontWeight.w700),
-              textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: ListView.separated(
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: (question['options'] as List).length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (_, index) {
-                final options = question['options'] as List;
-                final option = options[index] as String;
-                final isCorrect = option == question['correct'];
-                final isSelected = index == _selectedIndex;
-
-                Color borderColor = AppColors.border(dark);
-                Color bgColor = AppColors.card(dark);
-                Color textColor = AppColors.textPrimary(dark);
-                Widget? trailingIcon;
-
-                if (_answered) {
-                  if (isCorrect) {
-                    borderColor = Colors.green;
-                    bgColor = AppColors.correctGreen(dark);
-                    textColor = AppColors.correctText(dark);
-                    trailingIcon = Icon(Icons.check_rounded, color: AppColors.correctText(dark), size: 20);
-                  } else if (isSelected) {
-                    borderColor = Colors.redAccent;
-                    bgColor = AppColors.wrongRed(dark);
-                    textColor = AppColors.wrongText(dark);
-                    trailingIcon = Icon(Icons.close_rounded, color: AppColors.wrongText(dark), size: 20);
-                  }
-                }
-
-                return GestureDetector(
-                  onTap: () => _answer(index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: bgColor, borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: borderColor, width: 1.5),
-                      boxShadow: [BoxShadow(color: AppColors.shadow(dark), blurRadius: 4)]),
-                    child: Row(children: [
-                      Text('${letters[index]}. ', style: TextStyle(
-                        color: textColor, fontSize: 16, fontWeight: FontWeight.w600)),
-                      Expanded(child: Text(option, style: TextStyle(
-                        color: textColor, fontSize: 16, fontWeight: FontWeight.w600))),
-                      if (trailingIcon != null) trailingIcon,
-                    ]),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      Icons.arrow_back_rounded,
+                      color: AppColors.textPrimary(dark),
+                    ),
                   ),
-                );
-              },
+                  const Spacer(),
+                  Text(
+                    '${_index + 1} / ${_questions.length}',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(dark),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  minHeight: 7,
+                  value: (_index + 1) / _questions.length,
+                  backgroundColor: AppColors.border(dark),
+                  valueColor: const AlwaysStoppedAnimation(AppColors.cyan),
+                ),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 28,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.card(dark),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppColors.cyan, width: 2),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            question.prompt,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(dark),
+                              fontSize: 34,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            instruction,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textSecondary(dark),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    ...question.options.map(
+                      (option) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _AnswerButton(
+                          text: option,
+                          dark: dark,
+                          selected: _selected == option,
+                          correct: option == question.correctAnswer,
+                          answered: _selected != null,
+                          onTap: () => _answer(option),
+                        ),
+                      ),
+                    ),
+                    if (_selected != null) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _next,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.cyan,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            _index + 1 == _questions.length ? 'Finish' : 'Next',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResult(bool dark) {
+    return Scaffold(
+      backgroundColor: AppColors.bg(dark),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.emoji_events_rounded, color: AppColors.cyan, size: 80),
+                const SizedBox(height: 18),
+                Text(
+                  'Quiz complete!',
+                  style: TextStyle(
+                    color: AppColors.textPrimary(dark),
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$_score / ${_questions.length} correct',
+                  style: TextStyle(
+                    color: AppColors.textSecondary(dark),
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _restart,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.cyan,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                    ),
+                    child: const Text('Quiz again'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Row(children: [
-              Text('${_currentQuestion + 1} / $total',
-                style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13)),
-              const Spacer(),
-              if (_answered && _selectedIndex != null)
-                Text(
-                  (_questions[_currentQuestion]['options'] as List)[_selectedIndex!] ==
-                      _questions[_currentQuestion]['correct'] ? '+10 XP' : '',
-                  style: const TextStyle(color: AppColors.cyan, fontSize: 13,
-                    fontWeight: FontWeight.w700)),
-            ]),
-          ),
-        ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnswerButton extends StatelessWidget {
+  final String text;
+  final bool dark;
+  final bool selected;
+  final bool correct;
+  final bool answered;
+  final VoidCallback onTap;
+
+  const _AnswerButton({
+    required this.text,
+    required this.dark,
+    required this.selected,
+    required this.correct,
+    required this.answered,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color border = AppColors.border(dark);
+    Color background = AppColors.card(dark);
+
+    if (answered && correct) {
+      border = Colors.greenAccent;
+      background = Colors.green.withValues(alpha: 0.16);
+    } else if (selected) {
+      border = Colors.redAccent;
+      background = Colors.red.withValues(alpha: 0.14);
+    }
+
+    return GestureDetector(
+      onTap: answered ? null : onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: border, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: AppColors.textPrimary(dark),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (answered && correct)
+              const Icon(Icons.check_circle_rounded, color: Colors.greenAccent),
+            if (selected && !correct)
+              const Icon(Icons.cancel_rounded, color: Colors.redAccent),
+          ],
+        ),
       ),
     );
   }

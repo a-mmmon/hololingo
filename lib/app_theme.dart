@@ -34,18 +34,25 @@ class AppColors {
   static Color secondary(bool isDark) => isDark ? darkSecondary : lightSecondary;
   static Color border(bool isDark)    => isDark ? darkBorder    : lightBorder;
 
-  static Color textPrimary(bool isDark)   => isDark ? const Color(0xFFFFFFFF) : const Color(0xFF111827);
-  static Color textSecondary(bool isDark) => isDark ? const Color(0xFF8A8A9A) : const Color(0xFF6B7280);
-  static Color textTertiary(bool isDark)  => isDark ? const Color(0xFF555566) : const Color(0xFF9CA3AF);
+  static Color textPrimary(bool isDark)   =>
+      isDark ? const Color(0xFFFFFFFF) : const Color(0xFF111827);
+  static Color textSecondary(bool isDark) =>
+      isDark ? const Color(0xFF8A8A9A) : const Color(0xFF6B7280);
+  static Color textTertiary(bool isDark)  =>
+      isDark ? const Color(0xFF555566) : const Color(0xFF9CA3AF);
 
   static Color correctGreen(bool isDark) => isDark ? correctGreenDark : correctGreenLight;
-  static Color wrongRed(bool isDark)     => isDark ? wrongRedDark     : wrongRedLight;
+  static Color wrongRed(bool isDark)     => isDark ? wrongRedDark : wrongRedLight;
 
-  static Color correctText(bool isDark)  => isDark ? Colors.greenAccent : const Color(0xFF1B5E20);
-  static Color wrongText(bool isDark)    => isDark ? Colors.redAccent   : const Color(0xFFB71C1C);
+  static Color correctText(bool isDark) =>
+      isDark ? Colors.greenAccent : const Color(0xFF1B5E20);
+  static Color wrongText(bool isDark) =>
+      isDark ? Colors.redAccent : const Color(0xFFB71C1C);
 
-  static Color divider(bool isDark) => isDark ? Colors.white10 : const Color(0xFFE5E7EB);
-  static Color shadow(bool isDark)  => isDark ? Colors.transparent : const Color(0x0A000000);
+  static Color divider(bool isDark) =>
+      isDark ? Colors.white10 : const Color(0xFFE5E7EB);
+  static Color shadow(bool isDark) =>
+      isDark ? Colors.transparent : const Color(0x0A000000);
 }
 
 // ── Theme Notifier ────────────────────────────────────────────────────────────
@@ -113,18 +120,19 @@ class AppBottomNav extends StatelessWidget {
     final dark = ThemeProvider.isDark(context);
 
     const items = [
-      _NavItem(Icons.home_rounded, 'Home'),
-      _NavItem(Icons.qr_code_scanner_rounded, 'Scan'),
-      _NavItem(Icons.auto_stories_rounded, 'Review'),
-      _NavItem(Icons.bookmark_rounded, 'Vocab'),
-      _NavItem(Icons.person_rounded, 'Profile'),
+      _NavItem(icon: Icons.home_rounded, label: 'Home'),
+      _NavItem(icon: Icons.qr_code_scanner_rounded, label: 'Scan'),
+      _NavItem(icon: Icons.auto_stories_rounded, label: 'Review'),
+      _NavItem(icon: Icons.bookmark_rounded, label: 'Vocab'),
+      _NavItem(assetPath: 'assets/gobot.png', label: 'Gobot'),
     ];
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card(dark),
         border: Border(
-            top: BorderSide(color: AppColors.border(dark), width: 1)),
+          top: BorderSide(color: AppColors.border(dark), width: 1),
+        ),
         boxShadow: dark
             ? []
             : [
@@ -132,7 +140,7 @@ class AppBottomNav extends StatelessWidget {
                   color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 8,
                   offset: const Offset(0, -2),
-                )
+                ),
               ],
       ),
       child: SafeArea(
@@ -143,6 +151,7 @@ class AppBottomNav extends StatelessWidget {
             children: List.generate(items.length, (i) {
               final item = items[i];
               final selected = i == currentIndex;
+
               return Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -150,13 +159,30 @@ class AppBottomNav extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        item.icon,
-                        size: 22,
-                        color: selected
-                            ? AppColors.cyan
-                            : AppColors.textSecondary(dark),
-                      ),
+                      if (item.assetPath != null)
+                        Container(
+                          width: 30,
+                          height: 30,
+                          padding: const EdgeInsets.all(3),
+                          decoration: selected
+                              ? BoxDecoration(
+                                  color: AppColors.cyan,
+                                  borderRadius: BorderRadius.circular(9),
+                                )
+                              : null,
+                          child: Image.asset(
+                            item.assetPath!,
+                            fit: BoxFit.contain,
+                          ),
+                        )
+                      else
+                        Icon(
+                          item.icon,
+                          size: 22,
+                          color: selected
+                              ? AppColors.cyan
+                              : AppColors.textSecondary(dark),
+                        ),
                       const SizedBox(height: 3),
                       Text(
                         item.label,
@@ -183,7 +209,13 @@ class AppBottomNav extends StatelessWidget {
 }
 
 class _NavItem {
-  final IconData icon;
+  final IconData? icon;
   final String label;
-  const _NavItem(this.icon, this.label);
+  final String? assetPath;
+
+  const _NavItem({
+    this.icon,
+    required this.label,
+    this.assetPath,
+  });
 }

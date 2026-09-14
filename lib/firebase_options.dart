@@ -21,13 +21,13 @@ class DefaultFirebaseOptions {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return android;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for Android.',
+        );
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
         return macos;
-      case TargetPlatform.windows:
-        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -50,14 +50,6 @@ class DefaultFirebaseOptions {
     measurementId: 'G-41SM8HWB8Y',
   );
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBOIBUgCr6nW5UV8hiN9quR7XsWwq1Vd6Y',
-    appId: '1:235920291560:android:abd9d46561773a9719bb5d',
-    messagingSenderId: '235920291560',
-    projectId: 'hololingo-da112',
-    storageBucket: 'hololingo-da112.firebasestorage.app',
-  );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0',
     appId: '1:235920291560:ios:afb9347e6ef8166b19bb5d',
@@ -66,7 +58,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'hololingo-da112.firebasestorage.app',
     iosBundleId: 'com.example.arLanguageApp',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0',
     appId: '1:235920291560:ios:afb9347e6ef8166b19bb5d',
@@ -75,15 +66,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'hololingo-da112.firebasestorage.app',
     iosBundleId: 'com.example.arLanguageApp',
   );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyADg5nFJoTBP1k0l4W5Rlk-OwVhyBLWQ7c',
-    appId: '1:235920291560:web:315f69e99947678319bb5d',
-    messagingSenderId: '235920291560',
-    projectId: 'hololingo-da112',
-    authDomain: 'hololingo-da112.firebaseapp.com',
-    storageBucket: 'hololingo-da112.firebasestorage.app',
-    measurementId: 'G-QMG9WF3G7T',
-  );
-
 }
