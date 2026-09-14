@@ -91,8 +91,7 @@ class DetectedObject {
 
 class DetectorService {
   // Native iOS Vision foreground-segmentation bridge.
-  static const MethodChannel _visionChannel =
-      MethodChannel('hololingo/vision');
+  static const MethodChannel _visionChannel = MethodChannel('hololingo/vision');
 
   static Interpreter? _interpreter;
 
@@ -112,6 +111,7 @@ class DetectorService {
   /// reliable enough to be treated as real objects. Keeping this at 0.35
   /// prevents weak predictions from being passed to the capture flow.
   static const double _confidenceThreshold = 0.35;
+  static const double _targetConfidenceThreshold = 0.12;
 
   /// Labels embedded in best.tflite's metadata.json, in class-index order.
   /// (Class index maps directly to this list — no offset, unlike the old
@@ -346,8 +346,7 @@ class DetectorService {
         return null;
       }
 
-      final outputPath =
-          await _visionChannel.invokeMethod<String>(
+      final outputPath = await _visionChannel.invokeMethod<String>(
         'removeBackground',
         <String, dynamic>{
           'imagePath': imagePath,
@@ -449,11 +448,9 @@ class DetectorService {
       // Add a little padding around the object
       // -----------------------------------------------------------------------
 
-      final paddingX =
-          ((right - left) * 0.08).round();
+      final paddingX = ((right - left) * 0.08).round();
 
-      final paddingY =
-          ((bottom - top) * 0.08).round();
+      final paddingY = ((bottom - top) * 0.08).round();
 
       left -= paddingX;
       top -= paddingY;
@@ -514,14 +511,11 @@ class DetectorService {
 
       final originalFile = File(imagePath);
 
-      final directory =
-          originalFile.parent.path;
+      final directory = originalFile.parent.path;
 
-      final timestamp =
-          DateTime.now().millisecondsSinceEpoch;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
 
-      final outputPath =
-          '$directory/hololingo_crop_$timestamp.png';
+      final outputPath = '$directory/hololingo_crop_$timestamp.png';
 
       final outputFile = File(
         outputPath,
@@ -566,8 +560,7 @@ class DetectorService {
     }
 
     try {
-      final converted =
-          _cameraImageToImage(
+      final converted = _cameraImageToImage(
         cameraImage,
       );
 
@@ -704,12 +697,16 @@ class DetectorService {
       }
     }
 
-    if (bestClass < 0 || bestScore < _confidenceThreshold) {
+    final minimumScore = normalizedTarget == null
+        ? _confidenceThreshold
+        : _targetConfidenceThreshold;
+
+    if (bestClass < 0 || bestScore < minimumScore) {
       if (normalizedTarget != null) {
         debugPrint(
           'DetectorService: target "$normalizedTarget" was not detected reliably '
           '(best target score=${bestScore.toStringAsFixed(2)}, '
-          'threshold=$_confidenceThreshold).',
+          'threshold=$minimumScore).',
         );
       } else {
         debugPrint(
@@ -894,10 +891,7 @@ class DetectorService {
         return null;
       }
 
-      final bytesPerRow =
-          plane.bytesPerRow > 0
-              ? plane.bytesPerRow
-              : width * 4;
+      final bytesPerRow = plane.bytesPerRow > 0 ? plane.bytesPerRow : width * 4;
 
       final output = img.Image(
         width: width,
@@ -905,12 +899,10 @@ class DetectorService {
       );
 
       for (int y = 0; y < height; y++) {
-        final rowStart =
-            y * bytesPerRow;
+        final rowStart = y * bytesPerRow;
 
         for (int x = 0; x < width; x++) {
-          final index =
-              rowStart + (x * 4);
+          final index = rowStart + (x * 4);
 
           if (index + 3 >= bytes.length) {
             continue;
@@ -961,88 +953,59 @@ class DetectorService {
       height: height,
     );
 
-    final yPlane =
-        cameraImage.planes[0];
+    final yPlane = cameraImage.planes[0];
 
-    final uPlane =
-        cameraImage.planes[1];
+    final uPlane = cameraImage.planes[1];
 
-    final vPlane =
-        cameraImage.planes[2];
+    final vPlane = cameraImage.planes[2];
 
     final yBytes = yPlane.bytes;
     final uBytes = uPlane.bytes;
     final vBytes = vPlane.bytes;
 
-    final yRowStride =
-        yPlane.bytesPerRow;
+    final yRowStride = yPlane.bytesPerRow;
 
-    final uRowStride =
-        uPlane.bytesPerRow;
+    final uRowStride = uPlane.bytesPerRow;
 
-    final vRowStride =
-        vPlane.bytesPerRow;
+    final vRowStride = vPlane.bytesPerRow;
 
-    final uPixelStride =
-        uPlane.bytesPerPixel ?? 1;
+    final uPixelStride = uPlane.bytesPerPixel ?? 1;
 
-    final vPixelStride =
-        vPlane.bytesPerPixel ?? 1;
+    final vPixelStride = vPlane.bytesPerPixel ?? 1;
 
     for (int y = 0; y < height; y++) {
-      final yRow =
-          y * yRowStride;
+      final yRow = y * yRowStride;
 
-      final uvRow =
-          y ~/ 2;
+      final uvRow = y ~/ 2;
 
       for (int x = 0; x < width; x++) {
-        final yIndex =
-            yRow + x;
+        final yIndex = yRow + x;
 
         if (yIndex >= yBytes.length) {
           continue;
         }
 
-        final uvColumn =
-            x ~/ 2;
+        final uvColumn = x ~/ 2;
 
-        final uIndex =
-            uvRow * uRowStride +
-                uvColumn * uPixelStride;
+        final uIndex = uvRow * uRowStride + uvColumn * uPixelStride;
 
-        final vIndex =
-            uvRow * vRowStride +
-                uvColumn * vPixelStride;
+        final vIndex = uvRow * vRowStride + uvColumn * vPixelStride;
 
-        if (uIndex >= uBytes.length ||
-            vIndex >= vBytes.length) {
+        if (uIndex >= uBytes.length || vIndex >= vBytes.length) {
           continue;
         }
 
-        final yValue =
-            yBytes[yIndex].toDouble();
+        final yValue = yBytes[yIndex].toDouble();
 
-        final uValue =
-            uBytes[uIndex].toDouble() -
-                128.0;
+        final uValue = uBytes[uIndex].toDouble() - 128.0;
 
-        final vValue =
-            vBytes[vIndex].toDouble() -
-                128.0;
+        final vValue = vBytes[vIndex].toDouble() - 128.0;
 
-        double r =
-            yValue +
-            1.402 * vValue;
+        double r = yValue + 1.402 * vValue;
 
-        double g =
-            yValue -
-            0.344136 * uValue -
-            0.714136 * vValue;
+        double g = yValue - 0.344136 * uValue - 0.714136 * vValue;
 
-        double b =
-            yValue +
-            1.772 * uValue;
+        double b = yValue + 1.772 * uValue;
 
         r = r.clamp(
           0,

@@ -81,8 +81,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
 
-    _themeNotifier = ThemeNotifier()
-      ..setDark(widget.initialDark);
+    _themeNotifier = ThemeNotifier()..setDark(widget.initialDark);
 
     _themeNotifier.addListener(_saveTheme);
   }
@@ -195,6 +194,10 @@ class _AppShellState extends State<AppShell> {
     }
 
     if (index == AppTab.scan) {
+      if (_currentIndex != AppTab.scan) {
+        return const SizedBox.shrink();
+      }
+
       return LiveScannerTab(
         onBackToHome: () {
           _switchTab(AppTab.home);
@@ -324,8 +327,7 @@ class _AppBottomNav extends StatelessWidget {
                                   : AppColors.secondary(
                                       dark,
                                     ),
-                              borderRadius:
-                                  BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(10),
                               border: Border.all(
                                 color: selected
                                     ? AppColors.cyan
@@ -358,8 +360,7 @@ class _AppBottomNav extends StatelessWidget {
                                       alpha: 0.15,
                                     )
                                   : Colors.transparent,
-                              borderRadius:
-                                  BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
                               item.icon,
@@ -376,9 +377,8 @@ class _AppBottomNav extends StatelessWidget {
                           item.label,
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w400,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w400,
                             color: selected
                                 ? AppColors.cyan
                                 : AppColors.textSecondary(
@@ -616,28 +616,22 @@ class _CameraTabState extends State<CameraTab> {
       _lastImagePath = imagePath;
     });
 
-    final result =
-        await DictionaryService.getWordInfo(word);
+    final result = await DictionaryService.getWordInfo(word);
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _phonetic =
-          result['phonetic'] ?? '';
+      _phonetic = result['phonetic'] ?? '';
 
-      _definition =
-          result['definition'] ?? '';
+      _definition = result['definition'] ?? '';
 
-      _allDefinitions =
-          result['allDefinitions'] ?? '';
+      _allDefinitions = result['allDefinitions'] ?? '';
 
-      _example =
-          result['example'] ?? '';
+      _example = result['example'] ?? '';
 
-      _partOfSpeech =
-          result['partOfSpeech'] ?? 'Noun';
+      _partOfSpeech = result['partOfSpeech'] ?? 'Noun';
 
       _isLoadingWord = false;
     });
@@ -670,9 +664,7 @@ class _CameraTabState extends State<CameraTab> {
   Future<void> _startDetection() async {
     final ctrl = _controller;
 
-    if (ctrl == null ||
-        !ctrl.value.isInitialized ||
-        _isDetecting) {
+    if (ctrl == null || !ctrl.value.isInitialized || _isDetecting) {
       return;
     }
 
@@ -681,8 +673,7 @@ class _CameraTabState extends State<CameraTab> {
     });
 
     try {
-      final image =
-          await ctrl.takePicture();
+      final image = await ctrl.takePicture();
 
       debugPrint(
         'Camera captured: ${image.path}',
@@ -700,8 +691,7 @@ class _CameraTabState extends State<CameraTab> {
         );
       }
 
-      final result =
-          await DetectorService.detectObject(
+      final result = await DetectorService.detectObject(
         image.path,
       );
 
@@ -709,8 +699,7 @@ class _CameraTabState extends State<CameraTab> {
         return;
       }
 
-      if (result != null &&
-          result.isNotEmpty) {
+      if (result != null && result.isNotEmpty) {
         await _lookupWord(
           result,
           imagePath: image.path,
@@ -725,16 +714,13 @@ class _CameraTabState extends State<CameraTab> {
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
                 'No object detected. Try again!',
               ),
-              backgroundColor:
-                  Colors.orange,
-              duration:
-                  Duration(seconds: 2),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -799,8 +785,7 @@ class _CameraTabState extends State<CameraTab> {
   Widget _buildLoading() {
     return const Center(
       child: Column(
-        mainAxisSize:
-            MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min,
         children: [
           CircularProgressIndicator(
             color: AppColors.cyan,
@@ -824,11 +809,9 @@ class _CameraTabState extends State<CameraTab> {
   Widget _buildError() {
     return Center(
       child: Padding(
-        padding:
-            const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
               Icons.no_photography_outlined,
@@ -838,8 +821,7 @@ class _CameraTabState extends State<CameraTab> {
             const SizedBox(height: 16),
             Text(
               _cameraError,
-              textAlign:
-                  TextAlign.center,
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white60,
                 fontSize: 14,
@@ -856,18 +838,15 @@ class _CameraTabState extends State<CameraTab> {
                 _initCamera();
               },
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(
+                padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 12,
                 ),
-                decoration:
-                    BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border.all(
                     color: AppColors.cyan,
                   ),
-                  borderRadius:
-                      BorderRadius.circular(
+                  borderRadius: BorderRadius.circular(
                     24,
                   ),
                 ),
@@ -890,8 +869,7 @@ class _CameraTabState extends State<CameraTab> {
   // ==========================================================================
 
   Widget _buildBody() {
-    final dark =
-        ThemeProvider.isDark(context);
+    final dark = ThemeProvider.isDark(context);
 
     return Stack(
       children: [
@@ -919,12 +897,9 @@ class _CameraTabState extends State<CameraTab> {
         // DARK CAMERA GRADIENT
         // --------------------------------------------------------------------
         Container(
-          decoration:
-              BoxDecoration(
-            gradient:
-                RadialGradient(
-              center:
-                  Alignment.center,
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.center,
               radius: 1.2,
               colors: [
                 Colors.transparent,
@@ -941,8 +916,7 @@ class _CameraTabState extends State<CameraTab> {
         // --------------------------------------------------------------------
         Positioned.fill(
           child: CustomPaint(
-            painter:
-                _CornerPainter(),
+            painter: _CornerPainter(),
           ),
         ),
 
@@ -956,19 +930,15 @@ class _CameraTabState extends State<CameraTab> {
             right: 0,
             child: Center(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(
+                padding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 10,
                 ),
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.black.withValues(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(
                     alpha: 0.55,
                   ),
-                  borderRadius:
-                      BorderRadius.circular(
+                  borderRadius: BorderRadius.circular(
                     24,
                   ),
                   border: Border.all(
@@ -1005,40 +975,28 @@ class _CameraTabState extends State<CameraTab> {
                 ScrollController scrollController,
               ) {
                 return _WordPanel(
-                  scrollController:
-                      scrollController,
+                  scrollController: scrollController,
                   word: _detectedWord,
                   phonetic: _phonetic,
-                  partOfSpeech:
-                      _partOfSpeech,
+                  partOfSpeech: _partOfSpeech,
                   definition: _definition,
-                  allDefinitions:
-                      _allDefinitions,
+                  allDefinitions: _allDefinitions,
                   example: _example,
-                  isLoading:
-                      _isLoadingWord,
+                  isLoading: _isLoadingWord,
                   isDark: dark,
-                  onClose:
-                      _closeWordPanel,
+                  onClose: _closeWordPanel,
                   onListen: () {
                     _speak(
                       _detectedWord,
                     );
                   },
                   onSave: () async {
-                    await FirestoreService
-                        .saveWord({
-                      'word':
-                          _detectedWord,
-                      'phonetic':
-                          _phonetic,
-                      'definition':
-                          _definition,
-                      'example':
-                          _example,
-                      'image_path':
-                          _lastImagePath ??
-                              '',
+                    await FirestoreService.saveWord({
+                      'word': _detectedWord,
+                      'phonetic': _phonetic,
+                      'definition': _definition,
+                      'example': _example,
+                      'image_path': _lastImagePath ?? '',
                     });
 
                     if (mounted) {
@@ -1049,10 +1007,8 @@ class _CameraTabState extends State<CameraTab> {
                           content: Text(
                             '"$_detectedWord" saved!',
                           ),
-                          backgroundColor:
-                              Colors.green[700],
-                          duration:
-                              const Duration(
+                          backgroundColor: Colors.green[700],
+                          duration: const Duration(
                             seconds: 2,
                           ),
                         ),
@@ -1063,8 +1019,7 @@ class _CameraTabState extends State<CameraTab> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            const QuizScreen(),
+                        builder: (_) => const QuizScreen(),
                       ),
                     );
                   },
@@ -1072,17 +1027,12 @@ class _CameraTabState extends State<CameraTab> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            ARAnchorScreen(
-                      word:
-                          _detectedWord,
-                      phonetic:
-                          _phonetic,
-                      definition:
-                          _definition,
-                      example:
-                          _example,
-                            ),
+                        builder: (_) => ARAnchorScreen(
+                          word: _detectedWord,
+                          phonetic: _phonetic,
+                          definition: _definition,
+                          example: _example,
+                        ),
                       ),
                     );
                   },
@@ -1101,48 +1051,33 @@ class _CameraTabState extends State<CameraTab> {
             right: 0,
             child: Center(
               child: GestureDetector(
-                onTap: _isDetecting
-                    ? null
-                    : _startDetection,
+                onTap: _isDetecting ? null : _startDetection,
                 child: Container(
                   width: 64,
                   height: 64,
-                  decoration:
-                      BoxDecoration(
-                    shape:
-                        BoxShape.circle,
-                    color:
-                        AppColors.cyan
-                            .withValues(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.cyan.withValues(
                       alpha: 0.15,
                     ),
-                    border:
-                        Border.all(
-                      color:
-                          AppColors.cyan,
+                    border: Border.all(
+                      color: AppColors.cyan,
                       width: 2.5,
                     ),
                   ),
                   child: _isDetecting
                       ? const Padding(
-                          padding:
-                              EdgeInsets.all(
+                          padding: EdgeInsets.all(
                             16,
                           ),
-                          child:
-                              CircularProgressIndicator(
-                            color:
-                                AppColors
-                                    .cyan,
-                            strokeWidth:
-                                2.5,
+                          child: CircularProgressIndicator(
+                            color: AppColors.cyan,
+                            strokeWidth: 2.5,
                           ),
                         )
                       : const Icon(
-                          Icons
-                              .camera_alt_rounded,
-                          color:
-                              AppColors.cyan,
+                          Icons.camera_alt_rounded,
+                          color: AppColors.cyan,
                           size: 28,
                         ),
                 ),
@@ -1158,21 +1093,17 @@ class _CameraTabState extends State<CameraTab> {
 // SCANNER CORNER PAINTER
 // ============================================================================
 
-class _CornerPainter
-    extends CustomPainter {
+class _CornerPainter extends CustomPainter {
   @override
   void paint(
     Canvas canvas,
     Size size,
   ) {
     final paint = Paint()
-      ..color =
-          AppColors.scannerCorner
+      ..color = AppColors.scannerCorner
       ..strokeWidth = 3
-      ..style =
-          PaintingStyle.stroke
-      ..strokeCap =
-          StrokeCap.round;
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
     const len = 28.0;
     const m = 28.0;
@@ -1205,9 +1136,7 @@ class _CornerPainter
     // Top right
     canvas.drawLine(
       Offset(
-        size.width -
-            m -
-            len,
+        size.width - m - len,
         m,
       ),
       Offset(
@@ -1233,9 +1162,7 @@ class _CornerPainter
     canvas.drawLine(
       Offset(
         m,
-        size.height -
-            m -
-            len,
+        size.height - m - len,
       ),
       Offset(
         m,
@@ -1259,9 +1186,7 @@ class _CornerPainter
     // Bottom right
     canvas.drawLine(
       Offset(
-        size.width -
-            m -
-            len,
+        size.width - m - len,
         size.height - m,
       ),
       Offset(
@@ -1274,9 +1199,7 @@ class _CornerPainter
     canvas.drawLine(
       Offset(
         size.width - m,
-        size.height -
-            m -
-            len,
+        size.height - m - len,
       ),
       Offset(
         size.width - m,
@@ -1339,8 +1262,7 @@ class _WordPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card(isDark),
-        borderRadius:
-            const BorderRadius.vertical(
+        borderRadius: const BorderRadius.vertical(
           top: Radius.circular(30),
         ),
         boxShadow: [
@@ -1374,10 +1296,8 @@ class _WordPanel extends StatelessWidget {
                       width: 48,
                       height: 5,
                       decoration: BoxDecoration(
-                        color:
-                            AppColors.border(isDark),
-                        borderRadius:
-                            BorderRadius.circular(10),
+                        color: AppColors.border(isDark),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
@@ -1387,58 +1307,47 @@ class _WordPanel extends StatelessWidget {
                 // FIXED HEADER
                 // ------------------------------------------------------------
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(
+                  padding: const EdgeInsets.fromLTRB(
                     24,
                     2,
                     18,
                     10,
                   ),
                   child: Row(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Word + POS
                       Expanded(
                         child: Row(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Flexible(
                               child: Text(
                                 word,
                                 maxLines: 1,
-                                overflow:
-                                    TextOverflow.ellipsis,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 40,
-                                  fontWeight:
-                                      FontWeight.w800,
-                                  color: AppColors
-                                      .textPrimary(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary(
                                     isDark,
                                   ),
-                                  letterSpacing:
-                                      -0.8,
+                                  letterSpacing: -0.8,
                                 ),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Flexible(
                               child: Padding(
-                                padding:
-                                    const EdgeInsets
-                                        .only(
+                                padding: const EdgeInsets.only(
                                   bottom: 6,
                                 ),
                                 child: Text(
                                   '· $partOfSpeech',
                                   maxLines: 1,
-                                  overflow:
-                                      TextOverflow.ellipsis,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: AppColors
-                                        .textSecondary(
+                                    color: AppColors.textSecondary(
                                       isDark,
                                     ),
                                     fontSize: 15,
@@ -1465,8 +1374,7 @@ class _WordPanel extends StatelessWidget {
                           icon: Icon(
                             Icons.close_rounded,
                             size: 30,
-                            color: AppColors
-                                .textSecondary(
+                            color: AppColors.textSecondary(
                               isDark,
                             ),
                           ),
@@ -1481,39 +1389,31 @@ class _WordPanel extends StatelessWidget {
                 // ------------------------------------------------------------
                 Expanded(
                   child: SingleChildScrollView(
-                    controller:
-                        scrollController,
-                    physics:
-                        const ClampingScrollPhysics(),
-                    padding:
-                        const EdgeInsets.fromLTRB(
+                    controller: scrollController,
+                    physics: const ClampingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
                       24,
                       0,
                       24,
                       36,
                     ),
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // ----------------------------------------------------
                         // PHONETIC
                         // ----------------------------------------------------
                         if (phonetic.isNotEmpty)
                           Padding(
-                            padding:
-                                const EdgeInsets.only(
+                            padding: const EdgeInsets.only(
                               bottom: 14,
                             ),
                             child: Text(
                               phonetic,
-                              style:
-                                  const TextStyle(
-                                color:
-                                    AppColors.cyan,
+                              style: const TextStyle(
+                                color: AppColors.cyan,
                                 fontSize: 14,
-                                fontStyle:
-                                    FontStyle.italic,
+                                fontStyle: FontStyle.italic,
                               ),
                             ),
                           ),
@@ -1524,8 +1424,7 @@ class _WordPanel extends StatelessWidget {
                         Text(
                           definition,
                           style: TextStyle(
-                            color: AppColors
-                                .textPrimary(
+                            color: AppColors.textPrimary(
                               isDark,
                             ),
                             fontSize: 16,
@@ -1536,60 +1435,44 @@ class _WordPanel extends StatelessWidget {
                         // ----------------------------------------------------
                         // MORE MEANINGS
                         // ----------------------------------------------------
-                        if (allDefinitions
-                                .isNotEmpty &&
-                            allDefinitions.trim() !=
-                                definition.trim())
+                        if (allDefinitions.isNotEmpty &&
+                            allDefinitions.trim() != definition.trim())
                           Padding(
-                            padding:
-                                const EdgeInsets.only(
+                            padding: const EdgeInsets.only(
                               top: 12,
                             ),
                             child: Theme(
                               data: Theme.of(
                                 context,
                               ).copyWith(
-                                dividerColor:
-                                    Colors.transparent,
+                                dividerColor: Colors.transparent,
                               ),
-                              child:
-                                  ExpansionTile(
-                                tilePadding:
-                                    EdgeInsets.zero,
-                                childrenPadding:
-                                    const EdgeInsets
-                                        .only(
+                              child: ExpansionTile(
+                                tilePadding: EdgeInsets.zero,
+                                childrenPadding: const EdgeInsets.only(
                                   bottom: 6,
                                 ),
-                                iconColor:
-                                    AppColors.cyan,
-                                collapsedIconColor:
-                                    AppColors
-                                        .textSecondary(
+                                iconColor: AppColors.cyan,
+                                collapsedIconColor: AppColors.textSecondary(
                                   isDark,
                                 ),
                                 title: Text(
                                   'More meanings',
                                   style: TextStyle(
-                                    color: AppColors
-                                        .textPrimary(
+                                    color: AppColors.textPrimary(
                                       isDark,
                                     ),
                                     fontSize: 16,
-                                    fontWeight:
-                                        FontWeight.w700,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 children: [
                                   Align(
-                                    alignment:
-                                        Alignment
-                                            .centerLeft,
+                                    alignment: Alignment.centerLeft,
                                     child: Text(
                                       allDefinitions,
                                       style: TextStyle(
-                                        color: AppColors
-                                            .textSecondary(
+                                        color: AppColors.textSecondary(
                                           isDark,
                                         ),
                                         fontSize: 14,
@@ -1607,26 +1490,21 @@ class _WordPanel extends StatelessWidget {
                         // ----------------------------------------------------
                         if (example.isNotEmpty)
                           Padding(
-                            padding:
-                                const EdgeInsets.only(
+                            padding: const EdgeInsets.only(
                               top: 14,
                             ),
                             child: Container(
                               width: double.infinity,
-                              padding:
-                                  const EdgeInsets
-                                      .only(
+                              padding: const EdgeInsets.only(
                                 left: 14,
                                 right: 10,
                                 top: 4,
                                 bottom: 4,
                               ),
-                              decoration:
-                                  BoxDecoration(
+                              decoration: BoxDecoration(
                                 border: Border(
                                   left: BorderSide(
-                                    color:
-                                        AppColors.cyan,
+                                    color: AppColors.cyan,
                                     width: 3,
                                   ),
                                 ),
@@ -1634,13 +1512,11 @@ class _WordPanel extends StatelessWidget {
                               child: Text(
                                 '"$example"',
                                 style: TextStyle(
-                                  color: AppColors
-                                      .textSecondary(
+                                  color: AppColors.textSecondary(
                                     isDark,
                                   ),
                                   fontSize: 14,
-                                  fontStyle:
-                                      FontStyle.italic,
+                                  fontStyle: FontStyle.italic,
                                   height: 1.55,
                                 ),
                               ),
@@ -1656,8 +1532,7 @@ class _WordPanel extends StatelessWidget {
                           children: [
                             Expanded(
                               child: _ActionBtn(
-                                icon: Icons
-                                    .play_arrow_rounded,
+                                icon: Icons.play_arrow_rounded,
                                 label: 'Listen',
                                 onTap: onListen,
                                 filled: true,
@@ -1667,8 +1542,7 @@ class _WordPanel extends StatelessWidget {
                             const SizedBox(width: 10),
                             Expanded(
                               child: _ActionBtn(
-                                icon: Icons
-                                    .add_rounded,
+                                icon: Icons.add_rounded,
                                 label: 'Save',
                                 onTap: onSave,
                                 isDark: isDark,
@@ -1677,8 +1551,7 @@ class _WordPanel extends StatelessWidget {
                             const SizedBox(width: 10),
                             Expanded(
                               child: _ActionBtn(
-                                icon: Icons
-                                    .quiz_rounded,
+                                icon: Icons.quiz_rounded,
                                 label: 'Quiz me',
                                 onTap: onQuiz,
                                 isDark: isDark,
@@ -1695,8 +1568,7 @@ class _WordPanel extends StatelessWidget {
                         SizedBox(
                           width: double.infinity,
                           child: _ActionBtn(
-                            icon: Icons
-                                .view_in_ar_rounded,
+                            icon: Icons.view_in_ar_rounded,
                             label: 'Place in AR',
                             onTap: onPlaceAr,
                             isDark: isDark,
@@ -1718,8 +1590,7 @@ class _WordPanel extends StatelessWidget {
 // ACTION BUTTON
 // ============================================================================
 
-class _ActionBtn
-    extends StatelessWidget {
+class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -1743,15 +1614,11 @@ class _ActionBtn
       onTap: onTap,
       child: Container(
         height: 48,
-        padding:
-            const EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: 12,
         ),
-        decoration:
-            BoxDecoration(
-          color: filled
-              ? AppColors.cyan
-              : Colors.transparent,
+        decoration: BoxDecoration(
+          color: filled ? AppColors.cyan : Colors.transparent,
           border: Border.all(
             color: filled
                 ? AppColors.cyan
@@ -1760,42 +1627,36 @@ class _ActionBtn
                   ),
             width: 1.5,
           ),
-          borderRadius:
-              BorderRadius.circular(
+          borderRadius: BorderRadius.circular(
             25,
           ),
         ),
         child: Row(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               size: 18,
               color: filled
                   ? Colors.black
-                  : AppColors
-                      .textPrimary(
-                    isDark,
-                  ),
+                  : AppColors.textPrimary(
+                      isDark,
+                    ),
             ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
                 label,
                 maxLines: 1,
-                overflow:
-                    TextOverflow.ellipsis,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight:
-                      FontWeight.w600,
+                  fontWeight: FontWeight.w600,
                   color: filled
                       ? Colors.black
-                      : AppColors
-                          .textPrimary(
-                        isDark,
-                      ),
+                      : AppColors.textPrimary(
+                          isDark,
+                        ),
                 ),
               ),
             ),

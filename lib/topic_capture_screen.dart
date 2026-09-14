@@ -15,11 +15,13 @@ class TopicCaptureResult {
   final bool success;
   final String? imagePath;
   final String? detectedWord;
+  final String? definition;
 
   const TopicCaptureResult({
     required this.success,
     this.imagePath,
     this.detectedWord,
+    this.definition,
   });
 }
 
@@ -122,8 +124,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
       setState(() {
         _initializing = false;
-        _errorMessage =
-            'Could not open the camera.\n\n$e';
+        _errorMessage = 'Could not open the camera.\n\n$e';
       });
     }
   }
@@ -143,9 +144,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
   Future<void> _capture() async {
     final controller = _controller;
 
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        _capturing) {
+    if (controller == null || !controller.value.isInitialized || _capturing) {
       return;
     }
 
@@ -163,8 +162,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       // ---------------------------------------------------------------
       // 2. Detect the object
       // ---------------------------------------------------------------
-      final detectedDetails =
-          await DetectorService.detectObjectDetails(
+      final detectedDetails = await DetectorService.detectObjectDetails(
         photo.path,
         targetLabel: widget.word.word,
       );
@@ -178,8 +176,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
         setState(() {
           _capturing = false;
-          _errorMessage =
-              'No object was detected clearly.\\n\\n'
+          _errorMessage = 'No object was detected clearly.\n\n'
               'Place the ${widget.word.word} inside the frame, '
               'make sure it is clearly visible, and try again.';
         });
@@ -201,8 +198,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       String? processedPath;
 
       try {
-        processedPath =
-            await DetectorService.removeBackground(
+        processedPath = await DetectorService.removeBackground(
           photo.path,
           centerX: centerX,
           centerY: centerY,
@@ -241,8 +237,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
       setState(() {
         _capturing = false;
-        _errorMessage =
-            'Could not capture the photo.\n\n$e';
+        _errorMessage = 'Could not capture the photo.\n\n$e';
       });
     }
   }
@@ -254,9 +249,8 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     setState(() => _loadingDefinition = true);
 
     try {
-      final lookupWord = widget.word.word.trim().isEmpty
-          ? detected
-          : widget.word.word;
+      final lookupWord =
+          widget.word.word.trim().isEmpty ? detected : widget.word.word;
       final info = await DictionaryService.getWordInfo(lookupWord);
 
       if (!mounted) return;
@@ -301,11 +295,8 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
   String? _normalize(String? value) {
     if (value == null) return null;
 
-    final result = value
-        .toLowerCase()
-        .trim()
-        .replaceAll('_', ' ')
-        .replaceAll('-', ' ');
+    final result =
+        value.toLowerCase().trim().replaceAll('_', ' ').replaceAll('-', ' ');
 
     if (result.isEmpty) {
       return null;
@@ -397,6 +388,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
           success: true,
           imagePath: imagePath,
           detectedWord: _detectedWord,
+          definition: _definition,
         ),
       );
       return;
@@ -409,8 +401,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final detected =
-            _detectedWord ?? 'Unknown object';
+        final detected = _detectedWord ?? 'Unknown object';
 
         return AlertDialog(
           title: const Text(
@@ -466,8 +457,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              _errorMessage ??
-                  'Unable to access the camera.',
+              _errorMessage ?? 'Unable to access the camera.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -512,8 +502,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
   Widget _buildCameraView(bool dark) {
     final controller = _controller;
 
-    if (controller == null ||
-        !controller.value.isInitialized) {
+    if (controller == null || !controller.value.isInitialized) {
       return _buildCameraError(dark);
     }
 
@@ -521,7 +510,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       fit: StackFit.expand,
       children: [
         CameraPreview(controller),
-
         Align(
           alignment: Alignment.topCenter,
           child: Container(
@@ -538,7 +526,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
             ),
           ),
         ),
-
         Align(
           alignment: Alignment.bottomCenter,
           child: Container(
@@ -555,13 +542,36 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
             ),
           ),
         ),
-
         Center(
           child: _TargetFrame(
             color: widget.topicColor,
           ),
         ),
-
+        if (_errorMessage != null && !_capturing)
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 145,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.78),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: widget.topicColor,
+                ),
+              ),
+              child: Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ),
         Positioned(
           top: MediaQuery.of(context).padding.top + 75,
           left: 20,
@@ -572,7 +582,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
             color: widget.topicColor,
           ),
         ),
-
         Positioned(
           left: 20,
           right: 20,
@@ -733,9 +742,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
                   color: Colors.black.withValues(alpha: 0.78),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: correct
-                        ? Colors.green
-                        : Colors.redAccent,
+                    color: correct ? Colors.green : Colors.redAccent,
                     width: 1.5,
                   ),
                 ),
@@ -745,21 +752,16 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
                       correct
                           ? Icons.check_circle_rounded
                           : Icons.error_rounded,
-                      color: correct
-                          ? Colors.greenAccent
-                          : Colors.redAccent,
+                      color: correct ? Colors.greenAccent : Colors.redAccent,
                       size: 28,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            correct
-                                ? 'Correct object!'
-                                : 'Object not matched',
+                            correct ? 'Correct object!' : 'Object not matched',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -826,8 +828,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
                         ),
                       )
                     : Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Row(
@@ -844,8 +845,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
                               ),
                               IconButton(
                                 onPressed: _listen,
-                                visualDensity:
-                                    VisualDensity.compact,
+                                visualDensity: VisualDensity.compact,
                                 icon: Icon(
                                   Icons.volume_up_rounded,
                                   color: widget.topicColor,
@@ -1007,8 +1007,7 @@ class _InstructionCard extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Find this object',

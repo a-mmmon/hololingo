@@ -33,13 +33,11 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   bool _isScanning = false;
   bool _isOpeningAr = false;
 
-  DateTime _lastDetection =
-      DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastDetection = DateTime.fromMillisecondsSinceEpoch(0);
 
   DateTime? _scanStartedAt;
 
-  static const Duration _scanDuration =
-      Duration(seconds: 3);
+  static const Duration _scanDuration = Duration(seconds: 3);
 
   static const int _requiredStableDetections = 3;
 
@@ -178,8 +176,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   Future<void> _startImageStream() async {
     final controller = _cameraController;
 
-    if (controller == null ||
-        !controller.value.isInitialized) {
+    if (controller == null || !controller.value.isInitialized) {
       return;
     }
 
@@ -226,8 +223,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
     _detectionCounts.clear();
 
-    _lastDetection =
-        DateTime.fromMillisecondsSinceEpoch(0);
+    _lastDetection = DateTime.fromMillisecondsSinceEpoch(0);
 
     if (mounted) {
       setState(() {
@@ -266,10 +262,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
     final now = DateTime.now();
 
-    if (now
-            .difference(_lastDetection)
-            .inMilliseconds <
-        450) {
+    if (now.difference(_lastDetection).inMilliseconds < 450) {
       return;
     }
 
@@ -277,9 +270,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
     final startedAt = _scanStartedAt;
 
-    if (startedAt != null &&
-        now.difference(startedAt) >=
-            _scanDuration) {
+    if (startedAt != null && now.difference(startedAt) >= _scanDuration) {
       await _finishScan();
       return;
     }
@@ -287,20 +278,15 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     _isProcessing = true;
 
     try {
-      final detectedLabel =
-          await DetectorService.detectCameraImage(
+      final detectedLabel = await DetectorService.detectCameraImage(
         image,
       );
 
-      if (!mounted ||
-          !_isScanning ||
-          detectedLabel == null) {
+      if (!mounted || !_isScanning || detectedLabel == null) {
         return;
       }
 
-      final word = detectedLabel
-          .trim()
-          .toLowerCase();
+      final word = detectedLabel.trim().toLowerCase();
 
       if (word.isEmpty) {
         return;
@@ -310,19 +296,16 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         return;
       }
 
-      _detectionCounts[word] =
-          (_detectionCounts[word] ?? 0) + 1;
+      _detectionCounts[word] = (_detectionCounts[word] ?? 0) + 1;
 
       debugPrint(
         'Scanner: $word '
         'count=${_detectionCounts[word]}',
       );
 
-      final count =
-          _detectionCounts[word] ?? 0;
+      final count = _detectionCounts[word] ?? 0;
 
-      if (count >=
-          _requiredStableDetections) {
+      if (count >= _requiredStableDetections) {
         await _acceptDetectedWord(word);
       }
     } catch (e) {
@@ -358,8 +341,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
     final bestWord = _getMostFrequentWord();
 
-    if (bestWord == null ||
-        bestWord.trim().isEmpty) {
+    if (bestWord == null || bestWord.trim().isEmpty) {
       setState(() {
         _isScanning = false;
       });
@@ -412,9 +394,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   Future<void> _acceptDetectedWord(
     String word,
   ) async {
-    if (!mounted ||
-        !_isScanning ||
-        word.trim().isEmpty) {
+    if (!mounted || !_isScanning || word.trim().isEmpty) {
       return;
     }
 
@@ -456,7 +436,8 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
       if (details == null) {
         _lastImagePath = null;
-        debugPrint('Scanner image: object could not be located in the captured frame.');
+        debugPrint(
+            'Scanner image: object could not be located in the captured frame.');
         return;
       }
 
@@ -485,8 +466,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     String word,
   ) async {
     try {
-      final info =
-          await DictionaryService.getWordInfo(
+      final info = await DictionaryService.getWordInfo(
         word,
       );
 
@@ -495,21 +475,15 @@ class _LiveScannerTabState extends State<LiveScannerTab>
       }
 
       setState(() {
-        _detectedWord =
-            info['word']?.toString() ?? word;
+        _detectedWord = info['word']?.toString() ?? word;
 
-        _phonetic =
-            info['phonetic']?.toString() ?? '';
+        _phonetic = info['phonetic']?.toString() ?? '';
 
-        _partOfSpeech =
-            info['partOfSpeech']?.toString() ??
-                'Word';
+        _partOfSpeech = info['partOfSpeech']?.toString() ?? 'Word';
 
-        _definition =
-            info['definition']?.toString() ?? '';
+        _definition = info['definition']?.toString() ?? '';
 
-        _example =
-            info['example']?.toString() ?? '';
+        _example = info['example']?.toString() ?? '';
       });
 
       await _openArAutomatically();
@@ -526,8 +500,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         _detectedWord = word;
         _phonetic = '';
         _partOfSpeech = 'Word';
-        _definition =
-            'Definition is not available yet.';
+        _definition = 'Definition is not available yet.';
         _example = '';
       });
 
@@ -536,9 +509,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   }
 
   Future<void> _openArAutomatically() async {
-    if (!mounted ||
-        _detectedWord.trim().isEmpty ||
-        _isOpeningAr) {
+    if (!mounted || _detectedWord.trim().isEmpty || _isOpeningAr) {
       return;
     }
 
@@ -597,19 +568,15 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   ) {
     final controller = _cameraController;
 
-    if (controller == null ||
-        !controller.value.isInitialized) {
+    if (controller == null || !controller.value.isInitialized) {
       return;
     }
 
-    if (state ==
-        AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.inactive) {
       _stopImageStream();
     }
 
-    if (state ==
-            AppLifecycleState.resumed &&
-        mounted) {
+    if (state == AppLifecycleState.resumed && mounted) {
       _initializeCamera();
     }
   }
@@ -648,7 +615,6 @@ class _LiveScannerTabState extends State<LiveScannerTab>
               color: AppColors.cyan,
             ),
           ),
-
           Positioned(
             top: 20,
             left: 18,
@@ -661,7 +627,6 @@ class _LiveScannerTabState extends State<LiveScannerTab>
               ),
             ),
           ),
-
           const Positioned(
             left: 0,
             right: 0,
@@ -718,20 +683,19 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     return Positioned.fill(
       child: IgnorePointer(
         child: Center(
-          child: Container(
-            width: 285,
-            height: 285,
-            decoration: BoxDecoration(
-              borderRadius:
-                  BorderRadius.circular(26),
-              border: Border.all(
-                color: Colors.white
-                    .withValues(alpha: 0.15),
-                width: 1,
+          child: FractionallySizedBox(
+            widthFactor: 0.88,
+            heightFactor: 0.52,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  width: 1,
+                ),
               ),
+              child: const _ScanCorners(),
             ),
-            child:
-                const _ScanCorners(),
           ),
         ),
       ),
@@ -753,8 +717,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
       right: 0,
       child: Center(
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(
+          padding: const EdgeInsets.symmetric(
             horizontal: 18,
             vertical: 10,
           ),
@@ -762,8 +725,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
             color: Colors.black.withValues(
               alpha: 0.65,
             ),
-            borderRadius:
-                BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
@@ -771,12 +733,9 @@ class _LiveScannerTabState extends State<LiveScannerTab>
               SizedBox(
                 width: 18,
                 height: 18,
-                child:
-                    CircularProgressIndicator(
+                child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor:
-                      AlwaysStoppedAnimation<
-                          Color>(
+                  valueColor: AlwaysStoppedAnimation<Color>(
                     Colors.white,
                   ),
                 ),
@@ -813,20 +772,14 @@ class _LiveScannerTabState extends State<LiveScannerTab>
             width: 190,
             height: 56,
             child: ElevatedButton.icon(
-              onPressed:
-                  _isScanning || _isOpeningAr
-                      ? null
-                      : _startScan,
+              onPressed: _isScanning || _isOpeningAr ? null : _startScan,
               icon: _isScanning
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child:
-                          CircularProgressIndicator(
+                      child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<
-                                Color>(
+                        valueColor: AlwaysStoppedAnimation<Color>(
                           Colors.white,
                         ),
                       ),
@@ -835,26 +788,18 @@ class _LiveScannerTabState extends State<LiveScannerTab>
                       Icons.camera_alt_rounded,
                     ),
               label: Text(
-                _isScanning
-                    ? 'Scanning...'
-                    : 'Scan',
+                _isScanning ? 'Scanning...' : 'Scan',
               ),
-              style:
-                  ElevatedButton.styleFrom(
+              style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: Colors.black87,
-                disabledBackgroundColor:
-                    Colors.white70,
-                disabledForegroundColor:
-                    Colors.black54,
+                disabledBackgroundColor: Colors.white70,
+                disabledForegroundColor: Colors.black54,
                 elevation: 5,
-                shape:
-                    RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                textStyle:
-                    const TextStyle(
+                textStyle: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
@@ -913,14 +858,11 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         fit: StackFit.expand,
         children: [
           _buildCameraPreview(),
-
           Positioned.fill(
             child: IgnorePointer(
               child: Container(
-                decoration:
-                    const BoxDecoration(
-                  gradient:
-                      RadialGradient(
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
                     center: Alignment.center,
                     radius: 1.2,
                     colors: [
@@ -932,15 +874,10 @@ class _LiveScannerTabState extends State<LiveScannerTab>
               ),
             ),
           ),
-
           _buildBackButton(),
-
           _buildScanArea(),
-
           _buildScanningIndicator(),
-
           _buildScanButton(),
-
           if (_isOpeningAr)
             Positioned.fill(
               child: IgnorePointer(
@@ -950,8 +887,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
                   ),
                   alignment: Alignment.center,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(
+                    padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 20,
                     ),
@@ -959,12 +895,10 @@ class _LiveScannerTabState extends State<LiveScannerTab>
                       color: Colors.black.withValues(
                         alpha: 0.75,
                       ),
-                      borderRadius:
-                          BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Column(
-                      mainAxisSize:
-                          MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         CircularProgressIndicator(
                           color: AppColors.cyan,
@@ -975,8 +909,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 15,
-                            fontWeight:
-                                FontWeight.w600,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -996,8 +929,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
   @override
   Widget build(BuildContext context) {
-    if (!_cameraReady ||
-        _cameraController == null) {
+    if (!_cameraReady || _cameraController == null) {
       return _buildCameraLoading();
     }
 
@@ -1101,8 +1033,7 @@ class _Corner extends StatelessWidget {
               height: thickness,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(radius),
+                borderRadius: BorderRadius.circular(radius),
               ),
             ),
           ),
@@ -1116,8 +1047,7 @@ class _Corner extends StatelessWidget {
               height: length,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(radius),
+                borderRadius: BorderRadius.circular(radius),
               ),
             ),
           ),
@@ -1146,8 +1076,7 @@ class _CircleIconButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius:
-            BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(24),
         child: Container(
           width: 44,
           height: 44,

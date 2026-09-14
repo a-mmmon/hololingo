@@ -56,7 +56,16 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
         final word = (savedWord['word'] ?? '').toString().toLowerCase();
         final imagePath = (savedWord['image_path'] ?? '').toString();
         if (word.isNotEmpty && imagePath.isNotEmpty) {
-          imagePaths[word] = imagePath;
+          final persistentPath = await _persistImage(imagePath, word);
+          final usablePath = persistentPath ?? imagePath;
+          imagePaths[word] = usablePath;
+
+          if (persistentPath != null && persistentPath != imagePath) {
+            await FirestoreService.updateSavedWord(
+              word,
+              {'image_path': persistentPath},
+            );
+          }
         }
       }
 
@@ -83,7 +92,12 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
   // ============================================================
 
   Future<void> _tapWord(TopicWord word) async {
-    if (_learned.contains(word.word)) {
+    final wasAlreadyLearned = _learned.contains(word.word);
+    final existingImagePath = _imagePaths[word.word.toLowerCase()];
+    final hasExistingImage =
+        existingImagePath != null && File(existingImagePath).existsSync();
+
+    if (wasAlreadyLearned && hasExistingImage) {
       return;
     }
 
@@ -120,6 +134,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
       await FirestoreService.saveWord({
         'word': word.word,
         'image_path': imagePath ?? '',
+        'definition': result.definition ?? '',
       });
 
       await FirestoreService.markWordLearned(
@@ -158,7 +173,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
     // TOPIC COMPLETE
     // ==========================================================
 
-    if (_learned.length >= widget.topic.words.length) {
+    if (!wasAlreadyLearned && _learned.length >= widget.topic.words.length) {
       await _completeTopic();
     }
   }
@@ -175,8 +190,14 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
     try {
       final supportDirectory = await getApplicationSupportDirectory();
+      final cutoutDirectoryPath = '${supportDirectory.path}/topic_cutouts';
+
+      if (sourcePath.startsWith('$cutoutDirectoryPath/')) {
+        return sourcePath;
+      }
+
       final cutoutDirectory = Directory(
-        '${supportDirectory.path}/topic_cutouts',
+        cutoutDirectoryPath,
       );
       await cutoutDirectory.create(recursive: true);
 
@@ -389,13 +410,9 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
                               final imagePath =
                                   _imagePaths[word.word.toLowerCase()];
-
-                              final isNext = index == _learned.length;
-
                               return _WordTile(
                                 word: word,
                                 learned: learned,
-                                isNext: isNext,
                                 imagePath: imagePath,
                                 topicColor: widget.topic.color,
                                 dark: dark,
@@ -468,7 +485,6 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 class _WordTile extends StatelessWidget {
   final TopicWord word;
   final bool learned;
-  final bool isNext;
   final String? imagePath;
   final Color topicColor;
   final bool dark;
@@ -477,7 +493,6 @@ class _WordTile extends StatelessWidget {
   const _WordTile({
     required this.word,
     required this.learned,
-    required this.isNext,
     required this.imagePath,
     required this.topicColor,
     required this.dark,
@@ -486,11 +501,7 @@ class _WordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = learned
-        ? Colors.green
-        : isNext
-            ? topicColor
-            : AppColors.border(dark);
+    final borderColor = learned ? Colors.green : AppColors.border(dark);
 
     return GestureDetector(
       onTap: onTap,
@@ -501,19 +512,9 @@ class _WordTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: borderColor,
-            width: isNext ? 2 : 1.3,
+            width: 1.3,
           ),
-          boxShadow: isNext
-              ? [
-                  BoxShadow(
-                    color: topicColor.withValues(
-                      alpha: 0.15,
-                    ),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
+          boxShadow: null,
         ),
         padding: const EdgeInsets.all(7),
         child: Center(
@@ -529,31 +530,15 @@ class _WordTile extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                   ),
-                )
-              else
-                Text(
-                  word.word,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 19,
-                    color: learned
-                        ? Colors.green
-                        : AppColors.textPrimary(
-                            dark,
-                          ),
-                  ),
                 ),
 
               const SizedBox(
                 height: 5,
               ),
 
-              // Translation
+              // Keep the English object name visible below its image.
               Text(
-                word.translation,
+                word.word,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -569,7 +554,7 @@ class _WordTile extends StatelessWidget {
                 height: 8,
               ),
 
-              if (learned)
+              if (learned && imagePath != null && File(imagePath!).existsSync())
                 const Icon(
                   Icons.check_circle_rounded,
                   color: Colors.green,

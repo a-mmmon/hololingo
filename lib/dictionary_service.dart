@@ -203,8 +203,7 @@ class DictionaryService {
         selectedDefinition!['definition']?.toString().trim() ?? '';
     if (definition.isEmpty) return null;
 
-    final example =
-        selectedDefinition!['example']?.toString().trim() ?? '';
+    final example = selectedDefinition!['example']?.toString().trim() ?? '';
     final partOfSpeech =
         selectedMeaning!['partOfSpeech']?.toString().trim() ?? 'Word';
 
@@ -327,7 +326,8 @@ class DictionaryService {
     'remote': {
       'phonetic': '/rɪˈməʊt/',
       'partOfSpeech': 'Noun',
-      'definition': 'A device used to control a television or other electronic equipment from a distance.',
+      'definition':
+          'A device used to control a television or other electronic equipment from a distance.',
       'example': 'I used the remote to change the channel.',
     },
     'clock': {
@@ -345,25 +345,29 @@ class DictionaryService {
     'cell phone': {
       'phonetic': '/ˈsel fəʊn/',
       'partOfSpeech': 'Noun',
-      'definition': 'A portable phone that can make calls and send messages over a cellular network.',
+      'definition':
+          'A portable phone that can make calls and send messages over a cellular network.',
       'example': 'I called my friend on my cell phone.',
     },
     'sensor': {
       'phonetic': '/ˈsen.sər/',
       'partOfSpeech': 'Noun',
-      'definition': 'A device that detects or measures a physical change or condition.',
+      'definition':
+          'A device that detects or measures a physical change or condition.',
       'example': 'The sensor detects movement.',
     },
     'sensors': {
       'phonetic': '/ˈsen.sərz/',
       'partOfSpeech': 'Noun',
-      'definition': 'Devices that detect or measure physical changes or conditions.',
+      'definition':
+          'Devices that detect or measure physical changes or conditions.',
       'example': 'The sensors detect movement.',
     },
     'lamp': {
       'phonetic': '/læmp/',
       'partOfSpeech': 'Noun',
-      'definition': 'A device that produces light, usually for illuminating a room or area.',
+      'definition':
+          'A device that produces light, usually for illuminating a room or area.',
       'example': 'I turned on the lamp to read my book.',
     },
     'phone': {
@@ -386,6 +390,250 @@ class DictionaryService {
       'definition':
           'A small device used to control the pointer on a computer screen.',
       'example': 'Move the mouse to the right.',
+    },
+    'umbrella': {
+      'phonetic': '/ʌmˈbrel.ə/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A folding cover held above the head to protect a person from rain or sunlight.',
+      'example': 'I carried an umbrella because it was raining.',
+    },
+    'bird': {
+      'phonetic': '/bɜːd/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'An animal with feathers, wings, and a beak that usually lays eggs.',
+      'example': 'A small bird landed on the window.',
+    },
+    'cat': {
+      'phonetic': '/kæt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small domesticated animal with fur, four legs, and a long tail.',
+      'example': 'The cat is sleeping on the sofa.',
+    },
+    'dog': {
+      'phonetic': '/dɒɡ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A domesticated animal often kept as a companion or trained to work.',
+      'example': 'The dog is playing in the garden.',
+    },
+    'horse': {
+      'phonetic': '/hɔːs/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A large animal with four legs that people ride or use for work.',
+      'example': 'The horse ran across the field.',
+    },
+    'sheep': {
+      'phonetic': '/ʃiːp/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A farm animal with woolly fur that is often kept in groups.',
+      'example': 'The sheep are eating grass.',
+    },
+    'cow': {
+      'phonetic': '/kaʊ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A large farm animal kept for milk, meat, and other products.',
+      'example': 'The cow is standing near the fence.',
+    },
+    'elephant': {
+      'phonetic': '/ˈel.ɪ.fənt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A very large animal with a trunk, tusks, and big ears.',
+      'example': 'The elephant used its trunk to drink water.',
+    },
+    'bear': {
+      'phonetic': '/beər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A large, strong wild animal with thick fur and a short tail.',
+      'example': 'We saw a bear in the wildlife park.',
+    },
+    'zebra': {
+      'phonetic': '/ˈziː.brə/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'An African horse-like animal with black-and-white stripes.',
+      'example': 'The zebra stood beside the giraffe.',
+    },
+    'giraffe': {
+      'phonetic': '/dʒɪˈrɑːf/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A tall African animal with a very long neck and patterned skin.',
+      'example': 'The giraffe reached the leaves easily.',
+    },
+    'couch': {
+      'phonetic': '/kaʊtʃ/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A long, comfortable seat for two or more people.',
+      'example': 'We sat on the couch to watch a movie.',
+    },
+    'dining table': {
+      'phonetic': '/ˈdaɪ.nɪŋ ˌteɪ.bəl/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A table used for eating meals.',
+      'example': 'The plates are on the dining table.',
+    },
+    'bench': {
+      'phonetic': '/bentʃ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A long seat for two or more people, often made of wood or metal.',
+      'example': 'We sat on a bench in the park.',
+    },
+    'apple': {
+      'phonetic': '/ˈæp.əl/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A round fruit with firm flesh and skin that can be red, green, or yellow.',
+      'example': 'I packed an apple for lunch.',
+    },
+    'banana': {
+      'phonetic': '/bəˈnɑː.nə/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A long, curved fruit with yellow skin and soft sweet flesh.',
+      'example': 'She ate a banana after breakfast.',
+    },
+    'orange': {
+      'phonetic': '/ˈɒr.ɪndʒ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A round citrus fruit with orange skin and juicy sections inside.',
+      'example': 'He peeled an orange.',
+    },
+    'pizza': {
+      'phonetic': '/ˈpiːt.sə/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A flat baked dough covered with tomato sauce, cheese, and other toppings.',
+      'example': 'We ordered a pizza for dinner.',
+    },
+    'cake': {
+      'phonetic': '/keɪk/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A sweet baked food made from flour, sugar, eggs, and other ingredients.',
+      'example': 'We shared a chocolate cake.',
+    },
+    'sandwich': {
+      'phonetic': '/ˈsæn.wɪdʒ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'Food made by putting a filling between two pieces of bread.',
+      'example': 'I made a cheese sandwich.',
+    },
+    'hot dog': {
+      'phonetic': '/ˈhɒt dɒɡ/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A cooked sausage served in a long split roll.',
+      'example': 'He added mustard to his hot dog.',
+    },
+    'broccoli': {
+      'phonetic': '/ˈbrɒk.əl.i/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A green vegetable with a thick stem and small flowering heads.',
+      'example': 'The broccoli is ready to eat.',
+    },
+    'carrot': {
+      'phonetic': '/ˈkær.ət/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A long orange root vegetable that is often eaten raw or cooked.',
+      'example': 'The rabbit is eating a carrot.',
+    },
+    'donut': {
+      'phonetic': '/ˈdəʊ.nʌt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A small sweet fried cake, often shaped like a ring.',
+      'example': 'She chose a donut with chocolate icing.',
+    },
+    'bicycle': {
+      'phonetic': '/ˈbaɪ.sɪ.kəl/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A vehicle with two wheels moved by pedals.',
+      'example': 'I ride my bicycle to school.',
+    },
+    'car': {
+      'phonetic': '/kɑːr/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A road vehicle with an engine and four wheels for carrying people.',
+      'example': 'Their car is parked outside.',
+    },
+    'motorcycle': {
+      'phonetic': '/ˈməʊ.təˌsaɪ.kəl/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A two-wheeled vehicle powered by an engine.',
+      'example': 'He travels to work by motorcycle.',
+    },
+    'airplane': {
+      'phonetic': '/ˈeə.pleɪn/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A powered flying vehicle with fixed wings.',
+      'example': 'The airplane took off on time.',
+    },
+    'bus': {
+      'phonetic': '/bʌs/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A large road vehicle that carries many passengers.',
+      'example': 'I take the bus to work.',
+    },
+    'train': {
+      'phonetic': '/treɪn/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A series of connected vehicles that travel on a railway.',
+      'example': 'The train arrived at the station.',
+    },
+    'truck': {
+      'phonetic': '/trʌk/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A large road vehicle used for carrying goods.',
+      'example': 'The truck delivered the boxes.',
+    },
+    'boat': {
+      'phonetic': '/bəʊt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A small vessel used for travelling on water.',
+      'example': 'They crossed the lake by boat.',
+    },
+    'boot': {
+      'phonetic': '/buːt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A strong shoe that covers the foot and part of the leg.',
+      'example': 'She wore a pair of black boots.',
+    },
+    'glove': {
+      'phonetic': '/ɡlʌv/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A covering for the hand with separate sections for the fingers.',
+      'example': 'I put on a glove to protect my hand.',
+    },
+    'flowerpot': {
+      'phonetic': '/ˈflaʊ.ə.pɒt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A container used for growing a plant or flower.',
+      'example': 'The flowerpot is beside the window.',
+    },
+    'jacket': {
+      'phonetic': '/ˈdʒæk.ɪt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A short coat that covers the upper body and arms.',
+      'example': 'Take a jacket because it is cold outside.',
+    },
+    'spoon': {
+      'phonetic': '/spuːn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A utensil with a shallow bowl used for eating or serving food.',
+      'example': 'Use a spoon to stir the soup.',
     },
   };
 }
