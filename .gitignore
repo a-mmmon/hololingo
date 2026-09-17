@@ -48,3 +48,6 @@ android/app/build/
 .dart_tool/
 ios/build/
 ios/Pods/
+
+# ML training dataset (large, not meant for version control)
+/training/

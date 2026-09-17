@@ -5,6 +5,8 @@ import 'app_theme.dart';
 import 'firestore_service.dart';
 import 'edit_profile_screen.dart';
 import 'friends_screen.dart';
+import 'premium_paywall.dart';
+import 'premium_status.dart';
 import 'saved_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -29,6 +31,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _dailyReminder = true;
   bool _reviewReminder = true;
   bool _loading = true;
+
+  bool _isPremium = false;
+  DateTime? _premiumExpiresAt;
 
   // User-selectable learning and reminder settings.
   int _wordGoal = 10;
@@ -82,6 +87,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _parseFrequency(data['review_reminder_frequency']);
 
         _friends = friends.length;
+        _isPremium = isSubscriptionActive(data);
+        _premiumExpiresAt = subscriptionExpiryDate(data);
         _loading = false;
       });
 
@@ -474,99 +481,193 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openSubscription() {
+  void _openFeedback() {
     final dark = ThemeProvider.isDark(context);
+    final messageCtrl = TextEditingController();
+    String type = 'feedback';
+    bool submitting = false;
+    String? error;
 
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.card(dark),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: AppColors.border(dark),
-                    borderRadius: BorderRadius.circular(10),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            Future<void> submit() async {
+              if (messageCtrl.text.trim().isEmpty) {
+                setSheetState(() => error = 'Please write a message first.');
+                return;
+              }
+
+              setSheetState(() {
+                submitting = true;
+                error = null;
+              });
+
+              try {
+                await FirestoreService.submitFeedback(
+                  message: messageCtrl.text,
+                  type: type,
+                );
+
+                if (sheetContext.mounted) {
+                  Navigator.pop(sheetContext);
+                }
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Thanks! Your message was sent.'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                setSheetState(() {
+                  submitting = false;
+                  error = 'Could not send this right now. Try again.';
+                });
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                22,
+                18,
+                22,
+                24 + MediaQuery.of(sheetContext).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: AppColors.border(dark),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'HoloLingo Premium',
-                style: TextStyle(
-                  color: AppColors.textPrimary(dark),
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Unlock more vocabulary practice and learning features.',
-                style: TextStyle(
-                  color: AppColors.textSecondary(dark),
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 18),
-              ...[
-                'Unlocked topics',
-                'Remove ads',
-              ].map(
-                (text) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
+                  const SizedBox(height: 18),
+                  Text(
+                    'Help & feedback',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(dark),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
                     children: [
-                      const Icon(Icons.check_circle_rounded,
-                          color: AppColors.cyan, size: 19),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Feedback'),
+                          selected: type == 'feedback',
+                          onSelected: (_) =>
+                              setSheetState(() => type = 'feedback'),
+                        ),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          text,
-                          style: TextStyle(
-                              color: AppColors.textPrimary(dark), fontSize: 14),
+                        child: ChoiceChip(
+                          label: const Text('Report a problem'),
+                          selected: type == 'bug',
+                          onSelected: (_) => setSheetState(() => type = 'bug'),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Premium is coming soon.')),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.cyan,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: messageCtrl,
+                    maxLines: 5,
+                    style: TextStyle(color: AppColors.textPrimary(dark)),
+                    decoration: InputDecoration(
+                      hintText: type == 'bug'
+                          ? 'What went wrong?'
+                          : 'What can we do better?',
+                      hintStyle:
+                          TextStyle(color: AppColors.textSecondary(dark)),
+                      filled: true,
+                      fillColor: AppColors.secondary(dark),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
-                  child: const Text('Upgrade to Premium',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: submitting ? null : submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.cyan,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.black,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Send',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
+  }
+
+  Future<void> _openSubscription() async {
+    await showPremiumPaywall(context);
+    await _loadProfile();
+  }
+
+  String get _subscriptionSubtitle {
+    final expiresAt = _premiumExpiresAt;
+
+    if (!_isPremium || expiresAt == null) {
+      return 'Free plan · Upgrade to Premium';
+    }
+
+    return 'Premium · renews ${expiresAt.month}/${expiresAt.day}/${expiresAt.year}';
   }
 
   @override
@@ -936,7 +1037,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 iconColor: AppColors.cyan,
                 icon: Icons.workspace_premium_rounded,
                 title: 'Subscription',
-                subtitle: 'Free plan · Upgrade to Premium',
+                subtitle: _subscriptionSubtitle,
                 dark: dark,
                 onTap: _openSubscription,
               ),
@@ -971,6 +1072,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 title: 'Help & feedback',
                 subtitle: '',
                 dark: dark,
+                onTap: _openFeedback,
               ),
 
               _SettingsRow(

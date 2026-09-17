@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../app_theme.dart';
+import '../firestore_service.dart';
+import 'google_auth_service.dart';
+import 'google_sign_in_button.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -16,7 +19,10 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   Future<void> _login() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
@@ -24,6 +30,31 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _continueWithGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final cred = await GoogleAuthService.signIn();
+
+      if (cred.additionalUserInfo?.isNewUser ?? false) {
+        await FirestoreService.createUserProfile(
+          name: cred.user?.displayName ?? 'User',
+          email: cred.user?.email ?? '',
+        );
+      }
+    } on GoogleSignInCancelled {
+      // User backed out of the account picker; nothing to show.
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Could not sign in with Google.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -51,7 +82,8 @@ class _LoginScreenState extends State<LoginScreen> {
               // Logo
               Center(
                 child: Container(
-                  width: 72, height: 72,
+                  width: 72,
+                  height: 72,
                   decoration: BoxDecoration(
                     color: AppColors.cyan.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
@@ -64,8 +96,11 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 20),
               const Center(
                 child: Text('HoloLingo',
-                    style: TextStyle(color: Colors.white, fontSize: 28,
-                        fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5)),
               ),
               const Center(
                 child: Text('Learn words from the world around you',
@@ -77,7 +112,9 @@ class _LoginScreenState extends State<LoginScreen> {
               // Email field
               _Label('Email'),
               const SizedBox(height: 8),
-              _Field(controller: _emailCtrl, hint: 'you@email.com',
+              _Field(
+                  controller: _emailCtrl,
+                  hint: 'you@email.com',
                   keyboardType: TextInputType.emailAddress),
               const SizedBox(height: 16),
 
@@ -92,7 +129,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(_error!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                      style: const TextStyle(
+                          color: Colors.redAccent, fontSize: 13)),
                 ),
 
               // Login button
@@ -108,11 +146,36 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(16)),
                   ),
                   child: _loading
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.black, strokeWidth: 2))
                       : const Text('Log In',
-                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 16)),
                 ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Divider
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.white24)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or',
+                        style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  ),
+                  Expanded(child: Divider(color: Colors.white24)),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              GoogleSignInButton(
+                onPressed: _loading ? null : _continueWithGoogle,
               ),
 
               const SizedBox(height: 16),
@@ -127,8 +190,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       text: "Don't have an account? ",
                       style: TextStyle(color: Colors.white54, fontSize: 14),
                       children: [
-                        TextSpan(text: 'Sign up',
-                            style: TextStyle(color: AppColors.cyan,
+                        TextSpan(
+                            text: 'Sign up',
+                            style: TextStyle(
+                                color: AppColors.cyan,
                                 fontWeight: FontWeight.w700)),
                       ],
                     ),
@@ -150,8 +215,8 @@ class _Label extends StatelessWidget {
   const _Label(this.text);
   @override
   Widget build(BuildContext context) => Text(text,
-      style: const TextStyle(color: Colors.white70, fontSize: 13,
-          fontWeight: FontWeight.w600));
+      style: const TextStyle(
+          color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600));
 }
 
 class _Field extends StatelessWidget {
@@ -159,8 +224,11 @@ class _Field extends StatelessWidget {
   final String hint;
   final bool obscure;
   final TextInputType? keyboardType;
-  const _Field({required this.controller, required this.hint,
-      this.obscure = false, this.keyboardType});
+  const _Field(
+      {required this.controller,
+      required this.hint,
+      this.obscure = false,
+      this.keyboardType});
 
   @override
   Widget build(BuildContext context) {
@@ -179,7 +247,8 @@ class _Field extends StatelessWidget {
           hintText: hint,
           hintStyle: const TextStyle(color: Colors.white38),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         ),
       ),
     );

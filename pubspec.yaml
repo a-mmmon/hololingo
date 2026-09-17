@@ -31,6 +31,8 @@ dependencies:
   image: ^4.9.2
   share_plus: ^11.1.0
   image_picker: ^1.2.3
+  sensors_plus: ^7.1.0
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -73,8 +75,9 @@ flutter:
     - assets/dictionary/y/
     - assets/dictionary/z/
 
-    - assets/dictionary/valid_words.json
     - assets/gobot.png
+    - assets/3D/holo_mascot.glb
+    - assets/mascot/parts/
 
 flutter_launcher_icons:
   android: true

@@ -133,11 +133,12 @@ class DetectorService {
 
   static bool _isLoaded = false;
   static bool _loadFailed = false;
+  static bool _labelsMatchModel = false;
 
   /// Model input is 640x640 (confirmed from the .tflite input shape).
   static const int _inputSize = 640;
 
-  /// Output tensor is [1, 64, 8400]: 4 box values + 60 class scores.
+  /// The output class count and anchor count are read from the model at load time.
   static int _modelNumClasses = 60;
   static int _modelNumAnchors = 8400;
 
@@ -149,9 +150,9 @@ class DetectorService {
   static const double _confidenceThreshold = 0.35;
   static const double _targetConfidenceThreshold = 0.12;
 
-  /// Labels embedded in best.tflite's metadata.json, in class-index order.
-  /// (Class index maps directly to this list — no offset, unlike the old
-  /// SSD labelMap.txt which needed a +1 offset for a background entry.)
+  /// Labels embedded in the bundled 60-class `best.tflite`, in class-index
+  /// order. Do not replace this with training/data.yaml unless the bundled
+  /// model is also replaced with that 118-class export.
   static const List<String> _labels = [
     'Laptop',
     'USB',
@@ -251,6 +252,7 @@ class DetectorService {
 
       _modelNumClasses = outputShape[1] - 4;
       _modelNumAnchors = outputShape[2];
+      _labelsMatchModel = _modelNumClasses == _labels.length;
 
       _isLoaded = true;
 
@@ -325,6 +327,14 @@ class DetectorService {
         'DetectorService: no model available.',
       );
 
+      return null;
+    }
+
+    if (!_labelsMatchModel) {
+      debugPrint(
+        'DetectorService: refusing detection because model class count '
+        '($_modelNumClasses) does not match label count (${_labels.length}).',
+      );
       return null;
     }
 
@@ -608,8 +618,9 @@ class DetectorService {
   // ===========================================================================
 
   static Future<String?> detectCameraImage(
-    CameraImage cameraImage,
-  ) async {
+    CameraImage cameraImage, {
+    String? targetLabel,
+  }) async {
     if (!_isLoaded && !_loadFailed) {
       await loadModel();
     }
@@ -631,7 +642,10 @@ class DetectorService {
         return null;
       }
 
-      final result = _detectFromImage(converted);
+      final result = _detectFromImage(
+        converted,
+        targetLabel: targetLabel,
+      );
 
       return result?.label;
     } catch (e) {
@@ -688,7 +702,13 @@ class DetectorService {
   }) {
     final interpreter = _interpreter;
 
-    if (interpreter == null) {
+    if (interpreter == null || !_labelsMatchModel) {
+      if (!_labelsMatchModel) {
+        debugPrint(
+          'DetectorService: detection disabled until model and labels match '
+          '($_modelNumClasses vs ${_labels.length}).',
+        );
+      }
       return null;
     }
 

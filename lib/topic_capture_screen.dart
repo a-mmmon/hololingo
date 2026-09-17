@@ -15,13 +15,19 @@ class TopicCaptureResult {
   final bool success;
   final String? imagePath;
   final String? detectedWord;
+  final String? phonetic;
+  final String? partOfSpeech;
   final String? definition;
+  final String? example;
 
   const TopicCaptureResult({
     required this.success,
     this.imagePath,
     this.detectedWord,
+    this.phonetic,
+    this.partOfSpeech,
     this.definition,
+    this.example,
   });
 }
 
@@ -44,6 +50,10 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
   bool _initializing = true;
   bool _capturing = false;
+  bool _processingFrame = false;
+  bool _streaming = false;
+  int _stableMatches = 0;
+  CameraImage? _lastCameraImage;
 
   String? _errorMessage;
 
@@ -115,6 +125,8 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
         _initializing = false;
         _errorMessage = null;
       });
+
+      await _startLiveDetection();
     } catch (e) {
       debugPrint(
         'TopicCaptureScreen camera error: $e',
@@ -131,6 +143,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
   @override
   void dispose() {
+    _stopLiveDetection();
     _controller?.dispose();
     _tts.stop();
     super.dispose();
@@ -139,6 +152,160 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
   void _goBack() {
     if (_capturing) return;
     Navigator.of(context).pop();
+  }
+
+  Future<void> _startLiveDetection() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || _streaming) {
+      return;
+    }
+
+    try {
+      await controller.startImageStream(_processLiveFrame);
+      _streaming = true;
+    } catch (e) {
+      debugPrint('TopicCapture live stream error: $e');
+    }
+  }
+
+  Future<void> _stopLiveDetection() async {
+    final controller = _controller;
+    if (controller == null || !_streaming) return;
+
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+    } catch (e) {
+      debugPrint('TopicCapture stop stream error: $e');
+    }
+    _streaming = false;
+  }
+
+  Future<void> _processLiveFrame(CameraImage image) async {
+    if (_processingFrame || _capturing || !mounted) return;
+
+    _lastCameraImage = image;
+    _processingFrame = true;
+
+    try {
+      final detected = await DetectorService.detectCameraImage(
+        image,
+        targetLabel: widget.word.word,
+      );
+      if (!mounted || _capturing) return;
+
+      if (detected != null && _isCorrectObjectLabel(detected)) {
+        _stableMatches++;
+      } else {
+        _stableMatches = 0;
+      }
+
+      if (_stableMatches >= 3) {
+        await _finishLiveCapture();
+      }
+    } catch (e) {
+      debugPrint('TopicCapture live detection error: $e');
+    } finally {
+      _processingFrame = false;
+    }
+  }
+
+  bool _isCorrectObjectLabel(String detected) {
+    final normalized = _normalize(detected);
+    final expected = _normalize(widget.word.word);
+    if (normalized == null || expected == null) return false;
+    if (normalized == expected) return true;
+
+    const aliases = <String, List<String>>{
+      'laptop': ['laptop', 'notebook'],
+      'cell phone': [
+        'cell phone',
+        'cellphone',
+        'mobile phone',
+        'mobile',
+        'phone'
+      ],
+      'bicycle': ['bicycle', 'bike'],
+      'scissors': ['scissors', 'scissor'],
+      'cup': ['cup', 'coffee cup', 'mug'],
+      'bottle': ['bottle'],
+      'chair': ['chair', 'office chair'],
+    };
+
+    return aliases[expected]?.contains(normalized) ?? false;
+  }
+
+  Future<void> _finishLiveCapture() async {
+    if (!mounted || _capturing) return;
+
+    setState(() {
+      _capturing = true;
+      _errorMessage = null;
+    });
+    await _stopLiveDetection();
+
+    final frame = _lastCameraImage;
+    if (frame == null) {
+      if (mounted) {
+        setState(() {
+          _capturing = false;
+          _errorMessage = 'Could not capture the detected object. Try again.';
+        });
+      }
+      return;
+    }
+
+    final framePath = await DetectorService.saveCameraImage(frame);
+    if (framePath == null) {
+      if (mounted) setState(() => _capturing = false);
+      return;
+    }
+
+    final details = await DetectorService.detectObjectDetails(
+      framePath,
+      targetLabel: widget.word.word,
+    );
+    if (details == null) {
+      if (mounted) {
+        setState(() {
+          _capturing = false;
+          _errorMessage =
+              'The object moved. Aim the camera at it and try again.';
+        });
+        await _startLiveDetection();
+      }
+      return;
+    }
+
+    String? processedPath = await DetectorService.removeBackground(
+      framePath,
+      centerX: details.centerX,
+      centerY: details.centerY,
+    );
+    processedPath ??= framePath;
+
+    await _loadDefinitionForDetectedWord(widget.word.word);
+
+    if (!mounted) return;
+    setState(() {
+      _originalImagePath = framePath;
+      _capturedImagePath = processedPath;
+      _detectedWord = details.label;
+      _detectedConfidence = details.confidence;
+      _capturing = false;
+    });
+  }
+
+  Future<void> _loadDefinitionForDetectedWord(String word) async {
+    try {
+      final info = await DictionaryService.getWordInfo(word);
+      _phonetic = info['phonetic'] ?? '';
+      _definition = info['definition'] ?? '';
+      _example = info['example'] ?? '';
+    } catch (e) {
+      debugPrint('TopicCapture definition error: $e');
+    }
   }
 
   Future<void> _capture() async {
@@ -177,7 +344,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
         setState(() {
           _capturing = false;
           _errorMessage = 'No object was detected clearly.\n\n'
-              'Place the ${widget.word.word} inside the frame, '
+              'Aim the camera at ${widget.word.word}, '
               'make sure it is clearly visible, and try again.';
         });
         return;
@@ -290,6 +457,8 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       _loadingDefinition = false;
       _errorMessage = null;
     });
+    _stableMatches = 0;
+    _startLiveDetection();
   }
 
   String? _normalize(String? value) {
@@ -388,7 +557,10 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
           success: true,
           imagePath: imagePath,
           detectedWord: _detectedWord,
+          phonetic: _phonetic,
+          partOfSpeech: 'Noun',
           definition: _definition,
+          example: _example,
         ),
       );
       return;
@@ -499,6 +671,28 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     );
   }
 
+  Widget _buildCameraPreview(CameraController controller) {
+    final previewSize = controller.value.previewSize;
+
+    if (previewSize == null) {
+      return CameraPreview(controller);
+    }
+
+    return ClipRect(
+      child: SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: previewSize.height,
+            height: previewSize.width,
+            child: CameraPreview(controller),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCameraView(bool dark) {
     final controller = _controller;
 
@@ -509,16 +703,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned.fill(
-          child: ClipRect(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: CameraPreview(controller),
-              ),
-            ),
-          ),
-        ),
+        Positioned.fill(child: _buildCameraPreview(controller)),
         Align(
           alignment: Alignment.topCenter,
           child: Container(
@@ -551,11 +736,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
             ),
           ),
         ),
-        Center(
-          child: _TargetFrame(
-            color: widget.topicColor,
-          ),
-        ),
         if (_errorMessage != null && !_capturing)
           Positioned(
             left: 24,
@@ -582,7 +762,9 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
             ),
           ),
         Positioned(
-          top: MediaQuery.of(context).padding.top + 75,
+          // Keep this prompt below the back control rather than sharing the
+          // same top strip.
+          top: MediaQuery.of(context).padding.top + 92,
           left: 20,
           right: 20,
           child: _InstructionCard(
@@ -598,7 +780,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
           child: Column(
             children: [
               const Text(
-                'Place the object inside the frame',
+                'Aim the camera at the object',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -608,7 +790,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
               ),
               const SizedBox(height: 16),
               GestureDetector(
-                onTap: _capturing ? null : _capture,
+                onTap: _capturing ? null : _finishLiveCapture,
                 child: Container(
                   width: 76,
                   height: 76,
@@ -1048,169 +1230,5 @@ class _InstructionCard extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-// ================================================================
-// TARGET FRAME
-// ================================================================
-
-class _TargetFrame extends StatelessWidget {
-  final Color color;
-
-  const _TargetFrame({
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 320,
-      height: 400,
-      child: Stack(
-        children: [
-          _Corner(
-            alignment: Alignment.topLeft,
-            color: color,
-          ),
-          _Corner(
-            alignment: Alignment.topRight,
-            color: color,
-          ),
-          _Corner(
-            alignment: Alignment.bottomLeft,
-            color: color,
-          ),
-          _Corner(
-            alignment: Alignment.bottomRight,
-            color: color,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ================================================================
-// CORNER
-// ================================================================
-
-class _Corner extends StatelessWidget {
-  final Alignment alignment;
-  final Color color;
-
-  const _Corner({
-    required this.alignment,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isLeft = alignment.x < 0;
-    final isTop = alignment.y < 0;
-
-    return Align(
-      alignment: alignment,
-      child: SizedBox(
-        width: 42,
-        height: 42,
-        child: CustomPaint(
-          painter: _CornerPainter(
-            color: color,
-            isLeft: isLeft,
-            isTop: isTop,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ================================================================
-// CORNER PAINTER
-// ================================================================
-
-class _CornerPainter extends CustomPainter {
-  final Color color;
-  final bool isLeft;
-  final bool isTop;
-
-  _CornerPainter({
-    required this.color,
-    required this.isLeft,
-    required this.isTop,
-  });
-
-  @override
-  void paint(
-    Canvas canvas,
-    Size size,
-  ) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-
-    if (isLeft && isTop) {
-      path.moveTo(2, 18);
-      path.lineTo(2, 2);
-      path.lineTo(18, 2);
-    } else if (!isLeft && isTop) {
-      path.moveTo(
-        size.width - 18,
-        2,
-      );
-      path.lineTo(
-        size.width - 2,
-        2,
-      );
-      path.lineTo(
-        size.width - 2,
-        18,
-      );
-    } else if (isLeft && !isTop) {
-      path.moveTo(
-        2,
-        size.height - 18,
-      );
-      path.lineTo(
-        2,
-        size.height - 2,
-      );
-      path.lineTo(
-        18,
-        size.height - 2,
-      );
-    } else {
-      path.moveTo(
-        size.width - 18,
-        size.height - 2,
-      );
-      path.lineTo(
-        size.width - 2,
-        size.height - 2,
-      );
-      path.lineTo(
-        size.width - 2,
-        size.height - 18,
-      );
-    }
-
-    canvas.drawPath(
-      path,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(
-    covariant _CornerPainter oldDelegate,
-  ) {
-    return oldDelegate.color != color ||
-        oldDelegate.isLeft != isLeft ||
-        oldDelegate.isTop != isTop;
   }
 }

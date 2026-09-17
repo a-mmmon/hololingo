@@ -111,11 +111,27 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   // ===========================================================================
 
   Future<void> _initializeCamera() async {
+    final previousController = _cameraController;
+    _cameraController = null;
+    _lastCameraImage = null;
+
     try {
       if (mounted) {
         setState(() {
           _cameraReady = false;
         });
+      }
+
+      if (previousController != null) {
+        try {
+          if (previousController.value.isStreamingImages) {
+            await previousController.stopImageStream();
+          }
+        } catch (e) {
+          debugPrint('Could not stop previous image stream: $e');
+        } finally {
+          await previousController.dispose();
+        }
       }
 
       _cameras = await availableCameras();
@@ -166,6 +182,16 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     } catch (e) {
       debugPrint('Camera initialization error: $e');
 
+      final failedController = _cameraController;
+      _cameraController = null;
+      if (failedController != null) {
+        try {
+          await failedController.dispose();
+        } catch (disposeError) {
+          debugPrint('Camera disposal error: $disposeError');
+        }
+      }
+
       if (mounted) {
         setState(() {
           _cameraReady = false;
@@ -207,6 +233,34 @@ class _LiveScannerTabState extends State<LiveScannerTab>
       }
     } catch (e) {
       debugPrint('Could not stop image stream: $e');
+    }
+  }
+
+  /// ARKit needs exclusive access to the camera. Dispose the scanner camera
+  /// before presenting the AR route; it is recreated after that route closes.
+  Future<void> _releaseCameraForAr() async {
+    final controller = _cameraController;
+    _cameraController = null;
+    _lastCameraImage = null;
+
+    if (mounted) {
+      setState(() {
+        _cameraReady = false;
+      });
+    }
+
+    if (controller == null) {
+      return;
+    }
+
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+    } catch (e) {
+      debugPrint('Could not stop scanner camera for AR: $e');
+    } finally {
+      await controller.dispose();
     }
   }
 
@@ -356,7 +410,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Object not detected. Keep the object inside the box and try again.',
+            'Object not detected. Aim the camera at one supported object and try again.',
           ),
           duration: Duration(seconds: 2),
         ),
@@ -433,7 +487,10 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
       // Re-run detection on the saved frame so Vision can select the
       // foreground instance that corresponds to the detected object.
-      final details = await DetectorService.detectObjectDetails(framePath);
+      final details = await DetectorService.detectObjectDetails(
+        framePath,
+        targetLabel: word,
+      );
 
       if (details == null) {
         _lastImagePath = null;
@@ -549,6 +606,12 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         return;
       }
 
+      await _releaseCameraForAr();
+
+      if (!mounted) {
+        return;
+      }
+
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -577,7 +640,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
       _detectionCounts.clear();
 
-      await _startImageStream();
+      await _initializeCamera();
     }
   }
 
@@ -693,33 +756,6 @@ class _LiveScannerTabState extends State<LiveScannerTab>
 
             widget.onBackToHome?.call();
           },
-        ),
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // SCAN AREA
-  // ===========================================================================
-
-  Widget _buildScanArea() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Center(
-          child: FractionallySizedBox(
-            widthFactor: 0.88,
-            heightFactor: 0.52,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(26),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 1,
-                ),
-              ),
-              child: const _ScanCorners(),
-            ),
-          ),
         ),
       ),
     );
@@ -898,7 +934,6 @@ class _LiveScannerTabState extends State<LiveScannerTab>
             ),
           ),
           _buildBackButton(),
-          _buildScanArea(),
           _buildScanningIndicator(),
           _buildScanButton(),
           if (_isOpeningAr)
@@ -957,126 +992,6 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     }
 
     return _buildBody();
-  }
-}
-
-// =============================================================================
-// SCAN CORNERS
-// =============================================================================
-
-class _ScanCorners extends StatelessWidget {
-  const _ScanCorners();
-
-  @override
-  Widget build(BuildContext context) {
-    const double length = 42;
-    const double thickness = 4;
-    const double radius = 8;
-
-    return Stack(
-      children: [
-        Positioned(
-          left: 0,
-          top: 0,
-          child: _Corner(
-            top: true,
-            left: true,
-            length: length,
-            thickness: thickness,
-            radius: radius,
-          ),
-        ),
-        Positioned(
-          right: 0,
-          top: 0,
-          child: _Corner(
-            top: true,
-            left: false,
-            length: length,
-            thickness: thickness,
-            radius: radius,
-          ),
-        ),
-        Positioned(
-          left: 0,
-          bottom: 0,
-          child: _Corner(
-            top: false,
-            left: true,
-            length: length,
-            thickness: thickness,
-            radius: radius,
-          ),
-        ),
-        Positioned(
-          right: 0,
-          bottom: 0,
-          child: _Corner(
-            top: false,
-            left: false,
-            length: length,
-            thickness: thickness,
-            radius: radius,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Corner extends StatelessWidget {
-  final bool top;
-  final bool left;
-  final double length;
-  final double thickness;
-  final double radius;
-
-  const _Corner({
-    required this.top,
-    required this.left,
-    required this.length,
-    required this.thickness,
-    required this.radius,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: length,
-      height: length,
-      child: Stack(
-        children: [
-          Positioned(
-            left: left ? 0 : null,
-            right: left ? null : 0,
-            top: top ? 0 : null,
-            bottom: top ? null : 0,
-            child: Container(
-              width: length,
-              height: thickness,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(radius),
-              ),
-            ),
-          ),
-          Positioned(
-            left: left ? 0 : null,
-            right: left ? null : 0,
-            top: top ? 0 : null,
-            bottom: top ? null : 0,
-            child: Container(
-              width: thickness,
-              height: length,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(radius),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

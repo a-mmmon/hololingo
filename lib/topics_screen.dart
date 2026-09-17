@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 import 'firestore_service.dart';
+import 'premium_paywall.dart';
+import 'premium_status.dart';
 import 'topics_data.dart';
 import 'topic_word_grid_screen.dart';
 import 'event_group_lobby_screen.dart';
@@ -23,6 +25,7 @@ class _TopicsScreenState extends State<TopicsScreen> {
 
   bool _loading = true;
   bool _notifyLoading = false;
+  bool _isPremiumUser = false;
 
   Map<String, dynamic> _progress = {};
 
@@ -83,6 +86,8 @@ class _TopicsScreenState extends State<TopicsScreen> {
         _currentEvent = event;
 
         _eventNotifyOn = notifyOn;
+
+        _isPremiumUser = isSubscriptionActive(profile);
 
         _loading = false;
       });
@@ -422,7 +427,7 @@ class _TopicsScreenState extends State<TopicsScreen> {
     TopicDef topic,
   ) {
     if (topic.isPremium) {
-      return true;
+      return !_isPremiumUser;
     }
 
     final regularTopics = kTopics.where((item) => !item.isPremium).toList();
@@ -439,13 +444,15 @@ class _TopicsScreenState extends State<TopicsScreen> {
   ) async {
     if (_isLocked(topic)) {
       if (topic.isPremium) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Subscribe to unlock this topic.'),
-          ),
-        );
+        await showPremiumPaywall(context);
+        await _loadAll();
+
+        if (!mounted || _isLocked(topic)) {
+          return;
+        }
+      } else {
+        return;
       }
-      return;
     }
 
     final result = await Navigator.push<bool>(

@@ -8,6 +8,7 @@ import 'firestore_service.dart';
 import 'topics_data.dart';
 import 'topic_complete_screen.dart';
 import 'topic_capture_screen.dart';
+import 'ar_anchor_screen.dart';
 
 class TopicWordGridScreen extends StatefulWidget {
   final TopicDef topic;
@@ -119,12 +120,31 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
       return;
     }
 
-    // The word was successfully scanned.
     if (!result.success) {
       return;
     }
 
     final imagePath = await _persistImage(result.imagePath, word.word);
+
+    if (!mounted) return;
+
+    final finalWord = (result.detectedWord ?? word.word).trim();
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ARAnchorScreen(
+          word: finalWord.isNotEmpty ? finalWord : word.word,
+          phonetic: result.phonetic ?? '',
+          partOfSpeech: result.partOfSpeech ?? 'Noun',
+          definition: result.definition ?? '',
+          example: result.example ?? '',
+          imagePath: imagePath,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
 
     // ==========================================================
     // SAVE PROGRESS
@@ -264,6 +284,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
     final dark = ThemeProvider.isDark(context);
 
     final total = widget.topic.words.length;
+    final visibleCount = total > 9 ? 9 : total;
 
     final done = _learned.length;
 
@@ -324,7 +345,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
                                 height: 3,
                               ),
                               Text(
-                                '$total words · $done done',
+                                '$visibleCount words · $done done',
                                 style: TextStyle(
                                   color: AppColors.textSecondary(
                                     dark,
@@ -397,7 +418,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
                               mainAxisSpacing: spacing,
                               mainAxisExtent: tileHeight,
                             ),
-                            itemCount: total > 9 ? 9 : total,
+                            itemCount: visibleCount,
                             itemBuilder: (
                               context,
                               index,

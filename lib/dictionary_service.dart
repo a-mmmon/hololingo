@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 class DictionaryService {
-  static const String _baseUrl =
-      'https://api.dictionaryapi.dev/api/v2/entries/en';
+  static final Map<String, Map<String, String>?> _assetCache = {};
 
   // Keep these aliases because the object detector may return a slightly
   // different form from the dictionary's canonical word.
@@ -51,66 +51,113 @@ class DictionaryService {
 
     final localInfo = getLocalWordInfo(normalized);
     if (localInfo != null) {
+      // Local entries keep object scanning usable without network access.
+      debugPrint('Dictionary local hit: "$normalized"');
       return localInfo;
     }
 
-    try {
-      final uri = Uri.parse(
-        '$_baseUrl/${Uri.encodeComponent(normalized)}',
-      );
-
-      final response = await http.get(
-        uri,
-        headers: const {
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 2));
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-
-        if (decoded is List && decoded.isNotEmpty) {
-          final result = _parseEntry(normalized, decoded);
-          if (result != null) {
-            return result;
-          }
-        }
-      } else {
-        // 404 simply means the API could not find that word. Other failures
-        // are also handled by the local fallback below.
-        // No exception is thrown here because scanning should still work.
-        // ignore: avoid_print
-        print(
-          'Dictionary API returned ${response.statusCode} for "$normalized"',
-        );
-      }
-    } catch (e) {
-      // Keep the app usable if the device is offline or the API is unavailable.
-      // ignore: avoid_print
-      print('Dictionary API error for "$normalized": $e');
-    }
-
-    // Small offline fallback for the core objects already used by the app.
-    final fallback = _fallbackVocabulary[normalized];
-    if (fallback != null) {
-      return {
-        'word': normalized,
-        'phonetic': fallback['phonetic'] ?? '',
-        'partOfSpeech': fallback['partOfSpeech'] ?? 'Noun',
-        'definition': fallback['definition'] ?? '',
-        'example': fallback['example'] ?? '',
-        'audio': '',
-      };
+    final assetInfo = await _getAssetWordInfo(normalized);
+    if (assetInfo != null) {
+      return assetInfo;
     }
 
     return {
       'word': normalized,
       'phonetic': '',
       'partOfSpeech': 'Word',
-      'definition': 'No dictionary definition was found for "$normalized".',
+      'definition':
+          'The word "$normalized" was detected, but its full definition is not available offline yet.',
       'example': '',
       'audio': '',
     };
+  }
+
+  static Future<Map<String, String>?> _getAssetWordInfo(
+    String normalized,
+  ) async {
+    final cached = _assetCache[normalized];
+    if (_assetCache.containsKey(normalized)) return cached;
+
+    final prefix = normalized.replaceAll(RegExp(r'[^a-z]'), '');
+    if (prefix.isEmpty) {
+      _assetCache[normalized] = null;
+      return null;
+    }
+
+    final filePrefix = prefix.length == 1 ? prefix : prefix.substring(0, 2);
+    final assetPath = 'assets/dictionary/${filePrefix[0]}/$filePrefix.json';
+
+    try {
+      final decoded = jsonDecode(await rootBundle.loadString(assetPath));
+      final raw = decoded is Map ? decoded[normalized] : null;
+      if (raw is! Map) {
+        _assetCache[normalized] = null;
+        return null;
+      }
+
+      String? definition;
+      String partOfSpeech = 'Noun';
+      final etymologies = raw['etymologies'];
+      if (etymologies is List) {
+        for (final etymology in etymologies) {
+          final parts = etymology is Map ? etymology['partsOfSpeech'] : null;
+          if (parts is! List) continue;
+          for (final part in parts) {
+            if (part is! Map) continue;
+            final senses = part['senses'];
+            if (senses is! List) continue;
+            final candidate = senses.firstWhere(
+              (sense) =>
+                  sense is Map &&
+                  (sense['sense']?.toString().trim().isNotEmpty ?? false),
+              orElse: () => null,
+            );
+            if (candidate is Map) {
+              final candidateText = candidate['sense']?.toString().trim();
+              if (candidateText != null && candidateText.isNotEmpty) {
+                final candidatePart = part['partsOfSpeech']?.toString() ?? '';
+                if (definition == null ||
+                    candidatePart.toLowerCase() == 'noun') {
+                  definition = _stripHtml(candidateText);
+                  partOfSpeech = candidatePart.isEmpty ? 'Noun' : candidatePart;
+                }
+                if (candidatePart.toLowerCase() == 'noun') break;
+              }
+            }
+          }
+          if (definition != null && partOfSpeech.toLowerCase() == 'noun') break;
+        }
+      }
+
+      if (definition == null || definition.isEmpty) {
+        _assetCache[normalized] = null;
+        return null;
+      }
+
+      final result = {
+        'word': normalized,
+        'phonetic': '',
+        'partOfSpeech': _titleCase(partOfSpeech),
+        'definition': definition,
+        'example': '',
+        'audio': '',
+      };
+      _assetCache[normalized] = result;
+      debugPrint('Dictionary asset hit: "$normalized"');
+      return result;
+    } catch (e) {
+      debugPrint('Dictionary asset lookup failed for "$normalized": $e');
+      _assetCache[normalized] = null;
+      return null;
+    }
+  }
+
+  static String _stripHtml(String value) {
+    return value
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&amp;', '&')
+        .trim();
   }
 
   static Map<String, String>? _parseEntry(
@@ -485,6 +532,20 @@ class DictionaryService {
       'definition':
           'A long seat for two or more people, often made of wood or metal.',
       'example': 'We sat on a bench in the park.',
+    },
+    'key': {
+      'phonetic': '/kiː/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small piece of shaped metal used to open or lock a door, start a vehicle, or operate a device.',
+      'example': 'I used my key to unlock the door.',
+    },
+    'swan': {
+      'phonetic': '/swɒn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A large water bird with a long graceful neck and usually white feathers.',
+      'example': 'A swan was swimming across the lake.',
     },
     'apple': {
       'phonetic': '/ˈæp.əl/',

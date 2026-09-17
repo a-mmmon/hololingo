@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../firestore_service.dart';
 import '../app_theme.dart';
+import 'google_auth_service.dart';
+import 'google_sign_in_button.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -21,7 +23,10 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _error = 'Please enter your name.');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
@@ -41,6 +46,31 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _continueWithGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final cred = await GoogleAuthService.signIn();
+
+      if (cred.additionalUserInfo?.isNewUser ?? false) {
+        await FirestoreService.createUserProfile(
+          name: cred.user?.displayName ?? 'User',
+          email: cred.user?.email ?? '',
+        );
+      }
+    } on GoogleSignInCancelled {
+      // User backed out of the account picker; nothing to show.
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Could not sign in with Google.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -70,7 +100,8 @@ class _SignupScreenState extends State<SignupScreen> {
               GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: const Color(0xFF1C1C22),
                     borderRadius: BorderRadius.circular(12),
@@ -85,8 +116,11 @@ class _SignupScreenState extends State<SignupScreen> {
 
               // Header
               const Text('Create account',
-                  style: TextStyle(color: Colors.white, fontSize: 28,
-                      fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5)),
               const SizedBox(height: 8),
               const Text('Start learning words from the world around you',
                   style: TextStyle(color: Colors.white54, fontSize: 14)),
@@ -102,7 +136,9 @@ class _SignupScreenState extends State<SignupScreen> {
               // Email field
               _Label('Email'),
               const SizedBox(height: 8),
-              _Field(controller: _emailCtrl, hint: 'you@email.com',
+              _Field(
+                  controller: _emailCtrl,
+                  hint: 'you@email.com',
                   keyboardType: TextInputType.emailAddress),
               const SizedBox(height: 16),
 
@@ -135,13 +171,35 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   child: _loading
                       ? const SizedBox(
-                          width: 20, height: 20,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(
                               color: Colors.black, strokeWidth: 2))
                       : const Text('Create Account',
                           style: TextStyle(
                               fontWeight: FontWeight.w700, fontSize: 16)),
                 ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Divider
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.white24)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text('or',
+                        style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  ),
+                  Expanded(child: Divider(color: Colors.white24)),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              GoogleSignInButton(
+                onPressed: _loading ? null : _continueWithGoogle,
               ),
 
               const SizedBox(height: 20),
@@ -182,9 +240,7 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(text,
       style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 13,
-          fontWeight: FontWeight.w600));
+          color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600));
 }
 
 class _Field extends StatelessWidget {

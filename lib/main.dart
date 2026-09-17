@@ -21,6 +21,7 @@ import 'firestore_service.dart';
 import 'detector_service.dart';
 import 'app_theme.dart';
 import 'live_scanner_tab.dart';
+import 'subscription_service.dart';
 
 List<CameraDescription> cameras = [];
 
@@ -174,6 +175,15 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = AppTab.home;
 
   final Map<int, Widget> _tabCache = {};
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Started here (once the user has an authenticated shell) rather than in
+    // main(), since restoring/recording a purchase needs a signed-in uid.
+    SubscriptionService.init();
+  }
 
   void _switchTab(int index) {
     setState(() {

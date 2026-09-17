@@ -107,6 +107,29 @@ class FirestoreService {
   }
 
   // ============================================================
+  // FEEDBACK / REPORTS
+  // ============================================================
+
+  static Future<void> submitFeedback({
+    required String message,
+    String type = 'feedback',
+  }) async {
+    final trimmed = message.trim();
+
+    if (trimmed.isEmpty) return;
+
+    final user = _auth.currentUser;
+
+    await _db.collection('feedback').add({
+      'uid': user?.uid,
+      'email': user?.email,
+      'type': type,
+      'message': trimmed,
+      'created_at': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ============================================================
   // SCAN HISTORY
   // ============================================================
 
@@ -278,6 +301,37 @@ class FirestoreService {
           payload,
           SetOptions(merge: true),
         );
+  }
+
+  // ============================================================
+  // SUBSCRIPTION
+  // ============================================================
+  //
+  // Client-only entitlement tracking (see subscription_service.dart for the
+  // full trade-off). `expires_at` is an approximation computed from the
+  // purchase date plus the product's nominal duration, not a value Apple
+  // gave us directly. `verification_data` is stored now, unused, so a future
+  // server-side validation step doesn't need to re-collect it.
+
+  static Future<void> updateSubscriptionStatus({
+    required String productId,
+    required DateTime expiresAt,
+    required String transactionId,
+    required String verificationData,
+  }) async {
+    await _db.collection('users').doc(_uid).set(
+      {
+        'subscription': {
+          'status': 'active',
+          'product_id': productId,
+          'expires_at': Timestamp.fromDate(expiresAt),
+          'transaction_id': transactionId,
+          'verification_data': verificationData,
+          'updated_at': FieldValue.serverTimestamp(),
+        },
+      },
+      SetOptions(merge: true),
+    );
   }
 
   static Future<void> createUserProfile({

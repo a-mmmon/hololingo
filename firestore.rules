@@ -59,6 +59,14 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if false;
     }
+    // Users can submit feedback/bug reports but cannot read, edit, or
+    // delete any entry (including their own) — only backend/admin tooling
+    // should be able to read this collection.
+    match /feedback/{feedbackId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
     match /scan_history/{scanId} {
       allow create: if request.auth != null
         && request.resource.data.user_id == request.auth.uid;
