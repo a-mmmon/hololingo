@@ -183,6 +183,10 @@ class _AppShellState extends State<AppShell> {
     // Started here (once the user has an authenticated shell) rather than in
     // main(), since restoring/recording a purchase needs a signed-in uid.
     SubscriptionService.init();
+
+    // Populates the `topics` Firestore collection on the very first run
+    // against an empty database; a cheap no-op on every run after that.
+    FirestoreService.seedTopicsOnce();
   }
 
   void _switchTab(int index) {

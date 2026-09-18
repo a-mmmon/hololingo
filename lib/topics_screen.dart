@@ -27,6 +27,8 @@ class _TopicsScreenState extends State<TopicsScreen> {
   bool _notifyLoading = false;
   bool _isPremiumUser = false;
 
+  List<TopicDef> _topics = [];
+
   Map<String, dynamic> _progress = {};
 
   Map<String, dynamic>? _currentEvent;
@@ -48,6 +50,8 @@ class _TopicsScreenState extends State<TopicsScreen> {
       final profile = await FirestoreService.getProfileOrDefault();
 
       final progress = await FirestoreService.getTopicProgress();
+
+      final topics = await FirestoreService.getTopics();
 
       final event = await FirestoreService.getCurrentEvent();
 
@@ -82,6 +86,8 @@ class _TopicsScreenState extends State<TopicsScreen> {
         );
 
         _progress = progress;
+
+        _topics = topics;
 
         _currentEvent = event;
 
@@ -417,9 +423,9 @@ class _TopicsScreenState extends State<TopicsScreen> {
   }
 
   TopicDef get _activeTopic {
-    return kTopics.firstWhere(
+    return _topics.firstWhere(
       (t) => !_isComplete(t),
-      orElse: () => kTopics.last,
+      orElse: () => _topics.last,
     );
   }
 
@@ -430,7 +436,7 @@ class _TopicsScreenState extends State<TopicsScreen> {
       return !_isPremiumUser;
     }
 
-    final regularTopics = kTopics.where((item) => !item.isPremium).toList();
+    final regularTopics = _topics.where((item) => !item.isPremium).toList();
     final index = regularTopics.indexOf(topic);
     if (index <= 0) {
       return false;
@@ -495,6 +501,20 @@ class _TopicsScreenState extends State<TopicsScreen> {
             ? const Center(
                 child: CircularProgressIndicator(
                   color: AppColors.cyan,
+                ),
+              )
+            : _topics.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'No topics available right now. Check your connection and try again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary(dark),
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               )
             : Column(
@@ -627,6 +647,7 @@ class _TopicsScreenState extends State<TopicsScreen> {
                         horizontal: 20,
                       ),
                       child: _TopicMap(
+                        topics: _topics,
                         activeTopic: _activeTopic,
                         learnedCount: _learnedCount,
                         isComplete: _isComplete,
@@ -1102,7 +1123,10 @@ class _TopicMap extends StatelessWidget {
 
   final bool dark;
 
+  final List<TopicDef> topics;
+
   const _TopicMap({
+    required this.topics,
     required this.activeTopic,
     required this.learnedCount,
     required this.isComplete,
@@ -1122,7 +1146,7 @@ class _TopicMap extends StatelessWidget {
           constraints.maxHeight,
         );
 
-        final points = kTopics
+        final points = topics
             .map(
               (t) => Offset(
                 t.pos.dx * size.width,
@@ -1131,7 +1155,7 @@ class _TopicMap extends StatelessWidget {
             )
             .toList();
 
-        final activeIndex = kTopics.indexOf(
+        final activeIndex = topics.indexOf(
           activeTopic,
         );
 
@@ -1174,9 +1198,9 @@ class _TopicMap extends StatelessWidget {
                     size: 26,
                   ),
                 ),
-              for (int i = 0; i < kTopics.length; i++)
+              for (int i = 0; i < topics.length; i++)
                 _buildNode(
-                  kTopics[i],
+                  topics[i],
                   points[i],
                 ),
             ],

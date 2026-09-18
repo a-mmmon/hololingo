@@ -46,7 +46,9 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
       await _tts.setIosAudioCategory(
         IosTextToSpeechAudioCategory.playback,
         [
-          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          // defaultToSpeaker is only valid with category playAndRecord, and
+          // playback already routes to the speaker by default — including it
+          // here made iOS reject the whole category configuration.
           IosTextToSpeechAudioCategoryOptions.allowBluetooth,
           IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
         ],

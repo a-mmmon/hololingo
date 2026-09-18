@@ -76,7 +76,6 @@ flutter:
     - assets/dictionary/z/
 
     - assets/gobot.png
-    - assets/3D/holo_mascot.glb
     - assets/mascot/parts/
 
 flutter_launcher_icons:

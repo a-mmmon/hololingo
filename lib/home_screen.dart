@@ -14,9 +14,17 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Map<String, dynamic>> _recentWords = [];
-
-  bool _loading = true;
+  // ─────────────────────────────────────────
+  // LIVE WORD STREAMS
+  // ─────────────────────────────────────────
+  //
+  // Same reasoning as _profileStream below: the bottom nav's IndexedStack
+  // keeps this screen's State alive forever after the first build, so a
+  // one-time Future fetch here would never notice a scan or save made
+  // afterward. Live streams keep these sections current regardless.
+  Stream<List<Map<String, dynamic>>>? _savedWordsStream;
+  Stream<List<Map<String, dynamic>>>? _recentScansStream;
+  Stream<List<Map<String, dynamic>>>? _popularWordsStream;
 
   String _name = '';
 
@@ -56,9 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
 
     _profileStream = DatabaseService.watchProfile();
+    _savedWordsStream = DatabaseService.watchSavedWords(limit: 5);
+    _recentScansStream = DatabaseService.watchRecentScans(limit: 5);
+    _popularWordsStream = DatabaseService.watchPopularWords(limit: 8);
 
     _loadProfile();
-    _loadRecent();
     _loadEvent();
 
     // Check event status periodically so the card
@@ -122,32 +132,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _syncNotifyState(data);
     } catch (e) {
       debugPrint('HomeScreen profile error: $e');
-    }
-  }
-
-  // ─────────────────────────────────────────
-  // LOAD RECENT WORDS
-  // ─────────────────────────────────────────
-
-  Future<void> _loadRecent() async {
-    try {
-      final words = await DatabaseService.getSavedWords();
-
-      if (!mounted) return;
-
-      setState(() {
-        _recentWords = words.take(5).toList();
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('HomeScreen recent error: $e');
-
-      if (!mounted) return;
-
-      setState(() {
-        _recentWords = [];
-        _loading = false;
-      });
     }
   }
 
@@ -1024,13 +1008,60 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               // ───────────────────────
-              // RECENTLY SCANNED
+              // POPULAR WORDS OF THE WEEK (banner)
+              // ───────────────────────
+
+              Text(
+                'POPULAR WORDS OF THE WEEK',
+                style: TextStyle(
+                  color: AppColors.textSecondary(dark),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+
+              const SizedBox(
+                height: 12,
+              ),
+
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _popularWordsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.cyan,
+                      ),
+                    );
+                  }
+
+                  final words = snapshot.data ?? [];
+
+                  if (words.isEmpty) {
+                    return _EmptyRecent(dark: dark);
+                  }
+
+                  return _PopularWordsBanner(
+                    words: words,
+                    dark: dark,
+                  );
+                },
+              ),
+
+              const SizedBox(
+                height: 20,
+              ),
+
+              // ───────────────────────
+              // RECENTLY SAVED
               // ───────────────────────
 
               Row(
                 children: [
                   Text(
-                    'RECENTLY SCANNED',
+                    'RECENTLY SAVED',
                     style: TextStyle(
                       color: AppColors.textSecondary(
                         dark,
@@ -1065,47 +1096,117 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 12,
               ),
 
-              if (_loading)
-                const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.cyan,
-                  ),
-                )
-              else if (_recentWords.isEmpty)
-                _EmptyRecent(
-                  dark: dark,
-                )
-              else
-                ..._recentWords.asMap().entries.map(
-                  (entry) {
-                    final index = entry.key;
-
-                    final word = entry.value;
-
-                    final name = word['word']?.toString() ?? '';
-
-                    final translation = _translation(
-                      name,
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _savedWordsStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.cyan,
+                      ),
                     );
+                  }
 
-                    final time = _getRecentTime(
-                      word,
-                      index,
-                    );
+                  final savedWords = snapshot.data ?? [];
 
-                    final status = _getStatus(
-                      word,
-                    );
+                  if (savedWords.isEmpty) {
+                    return _EmptyRecent(dark: dark);
+                  }
 
-                    return _RecentWordTile(
-                      word: name,
-                      translation: translation,
-                      time: time,
-                      status: status,
-                      dark: dark,
-                    );
-                  },
+                  return Column(
+                    children: savedWords.asMap().entries.map(
+                      (entry) {
+                        final index = entry.key;
+                        final word = entry.value;
+                        final name = word['word']?.toString() ?? '';
+
+                        return _RecentWordTile(
+                          word: name,
+                          translation: _translation(name),
+                          time: _getRecentTime(word, index),
+                          status: _getStatus(word),
+                          dark: dark,
+                        );
+                      },
+                    ).toList(),
+                  );
+                },
+              ),
+
+              const SizedBox(
+                height: 20,
+              ),
+
+              // ───────────────────────
+              // RECENTLY SCANNED
+              // ───────────────────────
+              //
+              // Distinct from "Recently Saved" above: this shows every
+              // scan (scan_history), whether or not the user chose to save
+              // it, with its own Save button per row.
+
+              Text(
+                'RECENTLY SCANNED',
+                style: TextStyle(
+                  color: AppColors.textSecondary(dark),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
                 ),
+              ),
+
+              const SizedBox(
+                height: 12,
+              ),
+
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _savedWordsStream,
+                builder: (context, savedSnapshot) {
+                  final savedWordSet = (savedSnapshot.data ?? [])
+                      .map((w) => w['word']?.toString() ?? '')
+                      .toSet();
+
+                  return StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: _recentScansStream,
+                    builder: (context, scanSnapshot) {
+                      if (scanSnapshot.connectionState ==
+                              ConnectionState.waiting &&
+                          !scanSnapshot.hasData) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.cyan,
+                          ),
+                        );
+                      }
+
+                      final scans = scanSnapshot.data ?? [];
+
+                      if (scans.isEmpty) {
+                        return _EmptyRecent(dark: dark);
+                      }
+
+                      return Column(
+                        children: scans.map(
+                          (scan) {
+                            final name = scan['word']?.toString() ?? '';
+
+                            return _ScannedWordTile(
+                              word: name,
+                              translation: _translation(name),
+                              definition:
+                                  scan['definition']?.toString() ?? '',
+                              phonetic: scan['phonetic']?.toString() ?? '',
+                              alreadySaved: savedWordSet.contains(name),
+                              dark: dark,
+                            );
+                          },
+                        ).toList(),
+                      );
+                    },
+                  );
+                },
+              ),
 
               const SizedBox(
                 height: 20,
@@ -1222,6 +1323,227 @@ class _RecentWordTile extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// POPULAR WORDS BANNER
+// ─────────────────────────────────────────────
+//
+// Single scrollable row of pills, one per popular word, instead of a
+// vertical list — this is a "what's trending" glance, not something you
+// read line by line.
+
+class _PopularWordsBanner extends StatelessWidget {
+  final List<Map<String, dynamic>> words;
+  final bool dark;
+
+  const _PopularWordsBanner({
+    required this.words,
+    required this.dark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: words.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          final word = words[index]['word']?.toString() ?? '';
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.card(dark),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: AppColors.cyan.withValues(alpha: 0.35),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: AppColors.cyan,
+                  size: 15,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  word,
+                  style: TextStyle(
+                    color: AppColors.textPrimary(dark),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// SCANNED WORD TILE (with inline Save button)
+// ─────────────────────────────────────────────
+//
+// Scanning a word records it to scan_history regardless of whether the
+// user saves it — this tile is how they can save it after the fact,
+// straight from the Home feed, without reopening the AR/scan flow.
+
+class _ScannedWordTile extends StatefulWidget {
+  final String word;
+  final String translation;
+  final String definition;
+  final String phonetic;
+  final bool alreadySaved;
+  final bool dark;
+
+  const _ScannedWordTile({
+    required this.word,
+    required this.translation,
+    required this.definition,
+    required this.phonetic,
+    required this.alreadySaved,
+    required this.dark,
+  });
+
+  @override
+  State<_ScannedWordTile> createState() => _ScannedWordTileState();
+}
+
+class _ScannedWordTileState extends State<_ScannedWordTile> {
+  bool _saving = false;
+
+  Future<void> _save() async {
+    if (_saving || widget.alreadySaved) return;
+
+    setState(() {
+      _saving = true;
+    });
+
+    try {
+      await FirestoreService.saveWord({
+        'word': widget.word,
+        'definition': widget.definition,
+        'phonetic': widget.phonetic,
+      });
+    } catch (e) {
+      debugPrint('HomeScreen save-from-scan error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = widget.dark;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.card(dark),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.word,
+                  style: TextStyle(
+                    color: AppColors.textPrimary(dark),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (widget.translation.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    widget.translation,
+                    style: TextStyle(
+                      color: AppColors.textSecondary(dark),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: widget.alreadySaved ? null : _save,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: widget.alreadySaved
+                    ? Colors.transparent
+                    : AppColors.cyan.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: widget.alreadySaved
+                      ? AppColors.border(dark)
+                      : AppColors.cyan.withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.cyan,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          widget.alreadySaved
+                              ? Icons.check_rounded
+                              : Icons.bookmark_border_rounded,
+                          size: 15,
+                          color: widget.alreadySaved
+                              ? AppColors.textSecondary(dark)
+                              : AppColors.cyan,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          widget.alreadySaved ? 'Saved' : 'Save',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: widget.alreadySaved
+                                ? AppColors.textSecondary(dark)
+                                : AppColors.cyan,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],

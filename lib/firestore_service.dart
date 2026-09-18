@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import 'topics_data.dart';
+
 class FirestoreService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -106,6 +108,26 @@ class FirestoreService {
     return snap.docs.map((d) => d.data()).toList();
   }
 
+  /// Live version of getSavedWords(), for the Home screen. The bottom nav
+  /// keeps every tab alive in an IndexedStack with a const HomeScreen
+  /// widget, so HomeScreen's State is created once and never rebuilt from
+  /// scratch — a one-time Future fetch in initState only ever reflects
+  /// whatever was saved at the moment the app launched. A live stream
+  /// (same fix already used for the profile stats) keeps this current
+  /// without depending on the widget itself rebuilding.
+  static Stream<List<Map<String, dynamic>>> watchSavedWords({
+    int limit = 5,
+  }) {
+    return _db
+        .collection('users')
+        .doc(_uid)
+        .collection('saved_words')
+        .orderBy('created_at', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList());
+  }
+
   // ============================================================
   // FEEDBACK / REPORTS
   // ============================================================
@@ -150,6 +172,70 @@ class FirestoreService {
       'source': source,
       'created_at': FieldValue.serverTimestamp(),
     });
+
+    // Site-wide counter, separate from scan_history: every user's scan of
+    // this word bumps the same doc, so the Home screen can show what's
+    // popular across everyone without reading (and being allowed to read)
+    // other users' individual scan_history entries.
+    await _db.collection('word_stats').doc(normalizedWord).set(
+      {
+        'word': normalizedWord,
+        'scan_count': FieldValue.increment(1),
+        'last_scanned_at': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  /// Most-scanned words across all users, for the Home screen's "Popular
+  /// Now" section. Unlike getSavedWords(), this has nothing to do with
+  /// what the current user personally saved.
+  static Future<List<Map<String, dynamic>>> getPopularWords({
+    int limit = 5,
+  }) async {
+    try {
+      final snap = await _db
+          .collection('word_stats')
+          .orderBy('scan_count', descending: true)
+          .limit(limit)
+          .get();
+
+      return snap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      debugPrint('getPopularWords error: $e');
+      return [];
+    }
+  }
+
+  /// Live version of getPopularWords(), same reasoning as watchSavedWords().
+  static Stream<List<Map<String, dynamic>>> watchPopularWords({
+    int limit = 5,
+  }) {
+    return _db
+        .collection('word_stats')
+        .orderBy('scan_count', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList())
+        .handleError((e) => debugPrint('watchPopularWords error: $e'));
+  }
+
+  /// This user's own recent scan activity (every scan, not deduplicated by
+  /// word) — distinct from getSavedWords()/watchSavedWords(), which only
+  /// reflects words the user explicitly tapped Save on. Used by the Home
+  /// screen's "Recently Scanned" section, which shows a Save button per
+  /// row precisely because scanning something doesn't save it.
+  static Stream<List<Map<String, dynamic>>> watchRecentScans({
+    int limit = 5,
+  }) {
+    return _db
+        .collection('scan_history')
+        .where('user_id', isEqualTo: _uid)
+        .orderBy('created_at', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList())
+        .handleError((e) => debugPrint('watchRecentScans error: $e'));
   }
 
   static Future<void> deleteWord(
@@ -810,6 +896,59 @@ class FirestoreService {
       },
       SetOptions(merge: true),
     );
+  }
+
+  // ============================================================
+  // TOPICS
+  // ============================================================
+  //
+  // Topic content (name, icon, color, map position, word list) lives in
+  // the `topics` collection so new topics and words can be added from the
+  // Firebase Console without shipping an app update. See topics_data.dart
+  // for the TopicDef model and the icon name lookup table.
+
+  static Future<List<TopicDef>> getTopics() async {
+    try {
+      final snap =
+          await _db.collection('topics').orderBy('order').get();
+
+      return snap.docs
+          .map((d) => TopicDef.fromFirestore(d.id, d.data()))
+          .toList();
+    } catch (e) {
+      debugPrint('getTopics error: $e');
+      return [];
+    }
+  }
+
+  /// One-time migration: populates `topics` from kTopicsSeedData the first
+  /// time this runs against an empty collection. A no-op on every call
+  /// after that (checked via the cheap existence check below), so it's
+  /// safe to leave wired into app startup permanently — new topics/words
+  /// added later through the Firebase Console are never touched by this.
+  static Future<void> seedTopicsOnce() async {
+    try {
+      final existing = await _db.collection('topics').limit(1).get();
+
+      if (existing.docs.isNotEmpty) return;
+
+      final batch = _db.batch();
+
+      for (final topic in kTopicsSeedData) {
+        final id = topic['id'] as String;
+
+        batch.set(
+          _db.collection('topics').doc(id),
+          topic,
+        );
+      }
+
+      await batch.commit();
+
+      debugPrint('seedTopicsOnce: seeded ${kTopicsSeedData.length} topics.');
+    } catch (e) {
+      debugPrint('seedTopicsOnce error: $e');
+    }
   }
 
   // ============================================================

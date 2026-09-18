@@ -150,70 +150,107 @@ class DetectorService {
   static const double _confidenceThreshold = 0.35;
   static const double _targetConfidenceThreshold = 0.12;
 
-  /// Labels embedded in the bundled 60-class `best.tflite`, in class-index
-  /// order. Do not replace this with training/data.yaml unless the bundled
-  /// model is also replaced with that 118-class export.
+  /// Labels embedded in the bundled 89-class `best.tflite`, in class-index
+  /// order — must match training/data.yaml's `names:` list exactly (same
+  /// order), since this app does not read data.yaml at runtime.
+  ///
+  /// NOTE: the dataset has three case-duplicate classes (index pairs
+  /// 16/17 "key", 19/61 "mouse", 24/70 "rabbit") — the same real-world
+  /// object was labeled under two differently-cased class names during
+  /// dataset merging, so the model actually has two separate class slots
+  /// for each. That's a training-data issue, not something fixable here;
+  /// it'll just split confidence between the duplicate indices for those
+  /// three objects.
   static const List<String> _labels = [
-    'Laptop',
-    'USB',
-    'apple',
     'backpack',
-    'bamboo basket',
-    'bench',
-    'bicycle',
-    'book',
-    'boot',
-    'bottle',
-    'calculator',
-    'calendar',
+    'belt',
     'camera',
-    'car',
-    'cartain',
     'chair',
-    'charger',
     'clock',
-    'coffee mug',
-    'control',
-    'cup',
-    'cushion',
+    'computer-monitor',
     'desk',
-    'dryer',
-    'eyeglass',
+    'dog',
+    'door-handle',
+    'duck',
+    'elephant',
     'fan',
     'flower',
-    'flowerpot',
-    'glass',
-    'glove',
-    'jacket',
-    'jean',
+    'fork',
+    'fountain',
+    'frog',
     'key',
-    'keyboard',
-    'lamp',
-    'makeup brush',
-    'microwave',
-    'monitor',
+    'key',
+    'laptop',
     'mouse',
-    'office chair',
-    'paper',
+    'mug',
+    'outlet',
     'pen',
+    'projector',
+    'rabbit',
+    'ruler',
+    'shoes',
+    'skirt',
+    'spoon',
+    'stop-sign',
+    'traffic-sign',
+    'tripod',
+    'watch',
+    'ambulance',
+    'bag',
+    'basket',
+    'bench',
+    'bicycle',
+    'bird',
+    'box',
+    'cable',
+    'cabinet',
+    'calculator',
+    'car',
+    'cat',
+    'chicken',
+    'coin',
+    'crosswalk',
+    'curtain',
+    'door',
+    'earphone',
+    'eyeglass',
+    'hands',
+    'hat',
+    'jacket',
+    'kettle',
+    'keyboard',
+    'lamp post',
+    'mask',
+    'microphone',
+    'motorcycle',
+    'mouse',
+    'notebook',
+    'paper',
+    'paper cup',
+    'person',
     'phone',
     'pillow',
     'plant',
-    'rice cooker',
+    'potted plant',
+    'rabbit',
+    'rat',
+    'remote',
+    'ring',
+    'rubiks_cube',
     'scissor',
+    'shirt',
     'shoe',
-    'sock',
+    'sink',
+    'snack',
+    'snake',
     'sofa',
-    'spoon',
-    'sticky note',
-    'sunglass',
+    'stair',
+    'stapler',
     'table',
-    'tissue',
-    'tissue box',
-    'tooth brush',
+    'trash',
     'umbrella',
-    'washing machine',
-    'watch',
+    'wallet',
+    'waterbottle',
   ];
 
   // ===========================================================================
@@ -1156,7 +1193,11 @@ class DetectorService {
       case 'scissor':
         return model == 'scissor' || model == 'scissors';
       case 'coffee mug':
-        return model == 'coffee mug' || model == 'mug';
+        // The new 118-class model splits this into separate 'coffee cup'
+        // and 'mug' classes rather than one merged 'coffee mug' class.
+        return model == 'coffee mug' ||
+            model == 'coffee cup' ||
+            model == 'mug';
       case 'toothbrush':
       case 'tooth brush':
         return model == 'tooth brush' || model == 'toothbrush';

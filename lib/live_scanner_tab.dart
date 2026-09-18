@@ -81,7 +81,9 @@ class _LiveScannerTabState extends State<LiveScannerTab>
       await _tts.setIosAudioCategory(
         IosTextToSpeechAudioCategory.playback,
         [
-          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          // defaultToSpeaker is only valid with category playAndRecord, and
+          // playback already routes to the speaker by default — including it
+          // here made iOS reject the whole category configuration.
           IosTextToSpeechAudioCategoryOptions.allowBluetooth,
         ],
         IosTextToSpeechAudioMode.defaultMode,
@@ -456,6 +458,12 @@ class _LiveScannerTabState extends State<LiveScannerTab>
     setState(() {
       _isScanning = false;
       _isProcessing = false;
+      // Set here (not just in _openArAutomatically) so _startScan's guard
+      // blocks a new scan for the whole capture/dictionary/AR pipeline, not
+      // just the final navigation step. Otherwise a second scan can accept
+      // another word while this one is still mid-pipeline, and the two
+      // pipelines race (concurrent camera capture + AR navigation).
+      _isOpeningAr = true;
     });
 
     await _stopImageStream();
@@ -589,13 +597,9 @@ class _LiveScannerTabState extends State<LiveScannerTab>
   }
 
   Future<void> _openArAutomatically() async {
-    if (!mounted || _detectedWord.trim().isEmpty || _isOpeningAr) {
+    if (!mounted || _detectedWord.trim().isEmpty) {
       return;
     }
-
-    setState(() {
-      _isOpeningAr = true;
-    });
 
     try {
       await Future.delayed(

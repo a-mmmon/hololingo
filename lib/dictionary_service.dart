@@ -19,6 +19,26 @@ class DictionaryService {
       case 'mobile phone':
       case 'mobile':
         return 'cell phone';
+      // The following are detector class labels (compound/hyphenated names
+      // from the training dataset) that don't exist as headwords in the
+      // dictionary assets, but the object they refer to does under a
+      // simpler name. Verified against the actual dictionary JSON files —
+      // don't add more of these without checking a candidate word exists.
+      case 'computer-monitor':
+        return 'monitor';
+      case 'lamp post':
+        return 'lamppost';
+      case 'stop-sign':
+      case 'traffic-sign':
+        return 'sign';
+      case 'door-handle':
+        return 'handle';
+      case 'rubiks_cube':
+        return 'cube';
+      case 'potted plant':
+        return 'plant';
+      case 'paper cup':
+        return 'cup';
       default:
         return normalized;
     }
