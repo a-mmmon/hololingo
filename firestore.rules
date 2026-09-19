@@ -35,6 +35,118 @@ service cloud.firestore {
       return hasAdminAccount() && adminRole() == 'super_admin';
     }
 
+    // ============================================================
+    // COIN BATTLE HELPERS
+    //
+    // There is no Cloud Function to referee battles server-side (Spark
+    // plan, no billing account), so the winner and the coin transfer it
+    // triggers are both validated here instead of by a trusted backend.
+    // Same "client-trusted" acceptance already used for the Premium
+    // subscription and the coin refill purchase — reasonable for this
+    // project's size, not bulletproof against a determined attacker.
+    // ============================================================
+
+    // The winner is a pure function of both players' choices/timestamps
+    // and the immutable correct_index — a client cannot propose a
+    // different result than this and have it accepted (see the battles
+    // resolution rule below).
+    function battleExpectedResult(b) {
+      return (b.player_a_choice == b.player_a_correct_index && b.player_b_choice == b.player_b_correct_index)
+        ? (b.player_a_answered_at <= b.player_b_answered_at ? 'player_a' : 'player_b')
+        : b.player_a_choice == b.player_a_correct_index
+          ? 'player_a'
+          : b.player_b_choice == b.player_b_correct_index
+            ? 'player_b'
+            : 'draw';
+    }
+
+    // Lets either battle participant move BOTH players' coins in one
+    // transaction, but only by the exact amount a resolved battle they
+    // both belong to says is owed — and only once, since the battle
+    // doc's own `settled` flag (flipped in the same transaction) can
+    // only go false -> true a single time.
+    function isValidBattleCoinSettlement(userId) {
+      let battleId = request.resource.data.get('last_battle_settlement', null);
+      return battleId != null
+        && isValidBattleCoinSettlementFor(userId, battleId);
+    }
+
+    function isValidBattleCoinSettlementFor(userId, battleId) {
+      let battle = get(/databases/$(database)/documents/battles/$(battleId)).data;
+      let requesterIsParticipant = request.auth.uid == battle.player_a_uid || request.auth.uid == battle.player_b_uid;
+      let targetIsParticipant = userId == battle.player_a_uid || userId == battle.player_b_uid;
+      let isWinner = (battle.result == 'player_a' && userId == battle.player_a_uid)
+        || (battle.result == 'player_b' && userId == battle.player_b_uid);
+      let isLoser = targetIsParticipant && !isWinner && battle.result != 'draw';
+      let oldTokens = resource.data.tokens;
+      let proposedTokens = request.resource.data.tokens;
+      let expectedTokens =
+        battle.result == 'draw' ? oldTokens :
+        isWinner ? oldTokens + battle.wager :
+        isLoser ? (oldTokens - battle.wager > battle.coin_floor ? oldTokens - battle.wager : battle.coin_floor) :
+        oldTokens;
+      return battle.status == 'resolved'
+        && requesterIsParticipant
+        && targetIsParticipant
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tokens', 'last_battle_settlement'])
+        && proposedTokens == expectedTokens;
+    }
+
+    // ============================================================
+    // DAILY CHALLENGE HELPERS
+    //
+    // Event-scoped, admin-curated, matchmade 10-round battles — a
+    // separate mode from Coin Battle above (fixed wager, shared
+    // admin-set word list instead of each player's own saved words).
+    // Same no-Cloud-Function trade-off applies throughout.
+    // ============================================================
+
+    function dailyBattleParticipant(battleId) {
+      let battle = get(/databases/$(database)/documents/daily_battles/$(battleId)).data;
+      return request.auth.uid == battle.player_a_uid || request.auth.uid == battle.player_b_uid;
+    }
+
+    // A round can only be created holding the EXACT options/correct_index
+    // the admin set for that word that day — never whatever a client
+    // making the battle would prefer — since both players share this
+    // one set of rounds (unlike Coin Battle's own-words questions).
+    function dailyRoundMatchesSource(battleId, index) {
+      let battle = get(/databases/$(database)/documents/daily_battles/$(battleId)).data;
+      let source = get(/databases/$(database)/documents/events/$(battle.event_id)/daily_challenges/$(battle.challenge_date)/words/$(index)).data;
+      return request.resource.data.options == source.options
+        && request.resource.data.correct_index == source.correct_index;
+    }
+
+    function dailyBattleExpectedResult(scoreA, scoreB) {
+      return scoreA == scoreB ? 'draw' : (scoreA > scoreB ? 'player_a' : 'player_b');
+    }
+
+    function isValidDailySettlement(userId) {
+      let battleId = request.resource.data.get('last_daily_settlement', null);
+      return battleId != null && isValidDailySettlementFor(userId, battleId);
+    }
+
+    function isValidDailySettlementFor(userId, battleId) {
+      let battle = get(/databases/$(database)/documents/daily_battles/$(battleId)).data;
+      let requesterIsParticipant = request.auth.uid == battle.player_a_uid || request.auth.uid == battle.player_b_uid;
+      let targetIsParticipant = userId == battle.player_a_uid || userId == battle.player_b_uid;
+      let isWinner = (battle.result == 'player_a' && userId == battle.player_a_uid)
+        || (battle.result == 'player_b' && userId == battle.player_b_uid);
+      let isLoser = targetIsParticipant && !isWinner && battle.result != 'draw';
+      let oldTokens = resource.data.tokens;
+      let proposedTokens = request.resource.data.tokens;
+      let expectedTokens =
+        battle.result == 'draw' ? oldTokens :
+        isWinner ? oldTokens + battle.wager :
+        isLoser ? (oldTokens - battle.wager > battle.coin_floor ? oldTokens - battle.wager : battle.coin_floor) :
+        oldTokens;
+      return battle.status == 'resolved'
+        && requesterIsParticipant
+        && targetIsParticipant
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tokens', 'last_daily_settlement'])
+        && proposedTokens == expectedTokens;
+    }
+
     match /admins/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isPanelUser());
       allow create: if isSuperAdmin();
@@ -49,7 +161,10 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update: if request.auth != null
-        && (request.auth.uid == userId || isModerator());
+        && (request.auth.uid == userId
+            || isModerator()
+            || isValidBattleCoinSettlement(userId)
+            || isValidDailySettlement(userId));
       allow delete: if isModerator();
 
       match /saved_words/{word} {
@@ -88,9 +203,34 @@ service cloud.firestore {
         allow write: if request.auth != null
           && (request.auth.uid == userId || isModerator());
       }
-      match /event_invites/{inviteId} {
-        allow read, write: if request.auth != null
+      match /claimed_events/{eventId} {
+        allow read: if request.auth != null
           && (request.auth.uid == userId || isPanelUser());
+        allow write: if request.auth != null
+          && (request.auth.uid == userId || isModerator());
+      }
+      match /gobot_usage/{date} {
+        allow read: if request.auth != null
+          && (request.auth.uid == userId || isPanelUser());
+        allow write: if request.auth != null
+          && (request.auth.uid == userId || isModerator());
+      }
+
+      // Daily Challenge champion award, doc id = the event's id. Any
+      // signed-in user's client may write this (not just userId
+      // themselves) because it's set by whichever client happens to
+      // notice the event ended — gated on that event's own champion_uid
+      // (itself write-once, only settable after a real end_at) already
+      // naming this exact userId, so it can't be forged for someone
+      // who didn't actually win.
+      match /badges/{eventId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (
+          request.auth.uid == userId
+          || isModerator()
+          || (request.time > get(/databases/$(database)/documents/events/$(eventId)).data.end_at
+              && get(/databases/$(database)/documents/events/$(eventId)).data.champion_uid == userId)
+        );
       }
     }
 
@@ -154,6 +294,24 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Home-screen "last event champion" banner. Unlike the generic
+    // config rule above, any signed-in user can write this — it's set
+    // by whichever client happens to notice a live event has ended and
+    // computes who won the most Daily Challenge battles, since there's
+    // no Cloud Function to run that check on a schedule. Only WHICH
+    // event is referenced and that it has genuinely ended is
+    // rules-verifiable; who actually won the most is a client-side
+    // tally, the same disclosed trade-off as the rest of this file.
+    match /config/last_champion {
+      allow read: if true;
+      allow write: if isSuperAdmin() || (
+        request.auth != null
+        && request.resource.data.event_id is string
+        && request.time > get(/databases/$(database)/documents/events/$(request.resource.data.event_id)).data.end_at
+        && get(/databases/$(database)/documents/events/$(request.resource.data.event_id)).data.champion_uid == request.resource.data.uid
+      );
+    }
+
     // Users can submit feedback/bug reports but cannot read, edit, or
     // delete any entry (including their own); the admin panel can read.
     match /feedback/{feedbackId} {
@@ -202,11 +360,259 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow read: if request.auth != null;
-      allow write: if isModerator();
+      // champion_uid is write-once, only after the event has genuinely
+      // ended (request.time is real, not client-suppliable) — WHICH uid
+      // actually won the most is a client-side tally with no Cloud
+      // Function to verify it, the same disclosed trade-off as the rest
+      // of this file's client-trusted writes.
+      allow update: if isModerator() || (
+        request.auth != null
+        && resource.data.champion_uid == null
+        && request.time > resource.data.end_at
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['champion_uid'])
+        && request.resource.data.champion_uid is string
+      );
+      allow create, delete: if isModerator();
 
-      match /targets/{targetId} {
+      // Admin-curated vocabulary for that calendar day's Daily
+      // Challenge — one doc per word (not an array) so a battle round
+      // (below) can validate its options/correct_index against the
+      // exact real word via a single get(), instead of trusting
+      // whichever client creates the round.
+      match /daily_challenges/{date}/words/{index} {
         allow read: if request.auth != null;
-        allow write: if false;
+        allow write: if isModerator();
+      }
+    }
+
+    // ============================================================
+    // COIN BATTLE
+    // ============================================================
+
+    match /battles/{battleId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == resource.data.player_a_uid
+            || request.auth.uid == resource.data.player_b_uid
+            || isPanelUser());
+
+      // Each player is quizzed on a question built from their OWN saved
+      // words (player_a_options/correct_index and the b_ equivalents) —
+      // never the other player's, since saved_words is owner-only-read
+      // and this doc must be creatable by whichever of the two clients
+      // accepts the challenge. Both question sets, the wager and the
+      // coin_floor are set once here and can never change afterward —
+      // none of the update rules below ever touch them.
+      allow create: if request.auth != null
+        && (request.auth.uid == request.resource.data.player_a_uid
+            || request.auth.uid == request.resource.data.player_b_uid)
+        && request.resource.data.player_a_uid != request.resource.data.player_b_uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.result == null
+        && request.resource.data.settled == false
+        && request.resource.data.player_a_choice == null
+        && request.resource.data.player_b_choice == null
+        && request.resource.data.wager is int && request.resource.data.wager > 0
+        && request.resource.data.coin_floor is int && request.resource.data.coin_floor >= 0
+        && request.resource.data.player_a_options is list && request.resource.data.player_a_options.size() == 4
+        && request.resource.data.player_a_correct_index is int
+        && request.resource.data.player_a_correct_index >= 0 && request.resource.data.player_a_correct_index < 4
+        && request.resource.data.player_b_options is list && request.resource.data.player_b_options.size() == 4
+        && request.resource.data.player_b_correct_index is int
+        && request.resource.data.player_b_correct_index >= 0 && request.resource.data.player_b_correct_index < 4;
+
+      // Player A submits their own answer, once, with a server-assigned
+      // timestamp (never a client-supplied one, so nobody can lie about
+      // who answered first).
+      allow update: if request.auth != null
+        && resource.data.status == 'active'
+        && request.auth.uid == resource.data.player_a_uid
+        && resource.data.player_a_choice == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['player_a_choice', 'player_a_answered_at'])
+        && request.resource.data.player_a_choice is int
+        && request.resource.data.player_a_choice >= 0 && request.resource.data.player_a_choice < 4
+        && request.resource.data.player_a_answered_at == request.time;
+
+      // Player B, same as above.
+      allow update: if request.auth != null
+        && resource.data.status == 'active'
+        && request.auth.uid == resource.data.player_b_uid
+        && resource.data.player_b_choice == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['player_b_choice', 'player_b_answered_at'])
+        && request.resource.data.player_b_choice is int
+        && request.resource.data.player_b_choice >= 0 && request.resource.data.player_b_choice < 4
+        && request.resource.data.player_b_answered_at == request.time;
+
+      // Resolution: either participant may submit this once both
+      // answers are in, but only with the result battleExpectedResult()
+      // itself computes — a mismatched or premature resolution is
+      // rejected outright.
+      allow update: if request.auth != null
+        && (request.auth.uid == resource.data.player_a_uid || request.auth.uid == resource.data.player_b_uid)
+        && resource.data.status == 'active'
+        && resource.data.player_a_choice != null
+        && resource.data.player_b_choice != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'result', 'resolved_at'])
+        && request.resource.data.status == 'resolved'
+        && request.resource.data.result == battleExpectedResult(resource.data)
+        && request.resource.data.resolved_at == request.time;
+
+      // Settling coins: flips settled false -> true exactly once, in
+      // the same transaction as the users/{uid} token writes this
+      // unlocks (see isValidBattleCoinSettlement above). A second
+      // attempt sees settled already true and is rejected, so the
+      // payout can never happen twice.
+      allow update: if request.auth != null
+        && (request.auth.uid == resource.data.player_a_uid || request.auth.uid == resource.data.player_b_uid)
+        && resource.data.status == 'resolved'
+        && resource.data.settled == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['settled'])
+        && request.resource.data.settled == true;
+
+      allow delete: if false;
+    }
+
+    // A player opens a wager offer for anyone else to accept, staking
+    // one question built from their own saved words (creator_word/
+    // creator_options/creator_correct_index) since the eventual
+    // battles doc's create rule requires both players' questions to be
+    // known and only whoever accepts is a valid creator of that doc.
+    // Accepting copies this question across and adds the acceptor's own
+    // question, generated from words only the acceptor can read.
+    match /battle_challenges/{challengeId} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && request.resource.data.creator_uid == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.wager is int && request.resource.data.wager > 0
+        && request.resource.data.creator_options is list && request.resource.data.creator_options.size() == 4
+        && request.resource.data.creator_correct_index is int
+        && request.resource.data.creator_correct_index >= 0 && request.resource.data.creator_correct_index < 4;
+
+      // Accepting: only the open -> accepted transition, by someone
+      // other than the creator; the wager/creator can't be changed.
+      allow update: if request.auth != null
+        && resource.data.status == 'open'
+        && request.auth.uid != resource.data.creator_uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptor_uid', 'battle_id'])
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.acceptor_uid == request.auth.uid
+        && request.resource.data.creator_uid == resource.data.creator_uid
+        && request.resource.data.wager == resource.data.wager;
+
+      allow delete: if request.auth != null
+        && resource.data.creator_uid == request.auth.uid
+        && resource.data.status == 'open';
+    }
+
+    // ============================================================
+    // DAILY CHALLENGE
+    // ============================================================
+
+    // One entry per waiting user; matched by the next person who also
+    // wants that same event+day's challenge.
+    match /daily_challenge_queue/{uid} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.event_id is string
+        && request.resource.data.challenge_date is string;
+
+      // You may change/cancel your own entry freely; someone else may
+      // only flip your still-waiting entry to matched, pointing at a
+      // battle they are creating with you.
+      allow update: if request.auth != null && (
+        request.auth.uid == uid
+        || (resource.data.status == 'waiting'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'matched_with', 'battle_id'])
+            && request.resource.data.status == 'matched'
+            && request.resource.data.matched_with == request.auth.uid)
+      );
+
+      allow delete: if request.auth != null
+        && (request.auth.uid == uid || isModerator());
+    }
+
+    match /daily_battles/{battleId} {
+      // Broader than Coin Battle's own private battles on purpose:
+      // Daily Challenge is a public competitive event whose results
+      // feed the end-of-event champion tally, which a regular user's
+      // client has to compute itself (no Cloud Function) by reading
+      // every battle for that event — not just their own.
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && (request.auth.uid == request.resource.data.player_a_uid
+            || request.auth.uid == request.resource.data.player_b_uid)
+        && request.resource.data.player_a_uid != request.resource.data.player_b_uid
+        && request.resource.data.event_id is string
+        && request.resource.data.challenge_date is string
+        && request.resource.data.status == 'active'
+        && request.resource.data.result == null
+        && request.resource.data.settled == false
+        && request.resource.data.player_a_score == null
+        && request.resource.data.player_b_score == null
+        && request.resource.data.wager is int && request.resource.data.wager > 0
+        && request.resource.data.coin_floor is int && request.resource.data.coin_floor >= 0
+        && request.resource.data.round_count is int && request.resource.data.round_count > 0;
+
+      // Resolution: totals two already-locked-in per-round scores into
+      // a result — the per-round correctness feeding those scores was
+      // itself validated by each round's own rules below.
+      allow update: if request.auth != null
+        && (request.auth.uid == resource.data.player_a_uid || request.auth.uid == resource.data.player_b_uid)
+        && resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'result', 'player_a_score', 'player_b_score', 'resolved_at'])
+        && request.resource.data.status == 'resolved'
+        && request.resource.data.player_a_score is int
+        && request.resource.data.player_b_score is int
+        && request.resource.data.result == dailyBattleExpectedResult(request.resource.data.player_a_score, request.resource.data.player_b_score)
+        && request.resource.data.resolved_at == request.time;
+
+      // Settling coins: settled false -> true exactly once, same
+      // pattern as Coin Battle.
+      allow update: if request.auth != null
+        && (request.auth.uid == resource.data.player_a_uid || request.auth.uid == resource.data.player_b_uid)
+        && resource.data.status == 'resolved'
+        && resource.data.settled == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['settled'])
+        && request.resource.data.settled == true;
+
+      allow delete: if false;
+
+      match /rounds/{index} {
+        allow read: if request.auth != null
+          && (dailyBattleParticipant(battleId) || isPanelUser());
+
+        allow create: if request.auth != null
+          && dailyBattleParticipant(battleId)
+          && dailyRoundMatchesSource(battleId, index)
+          && request.resource.data.player_a_choice == null
+          && request.resource.data.player_b_choice == null;
+
+        allow update: if request.auth != null && (
+          (dailyBattleParticipant(battleId)
+            && get(/databases/$(database)/documents/daily_battles/$(battleId)).data.player_a_uid == request.auth.uid
+            && resource.data.player_a_choice == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['player_a_choice', 'player_a_answered_at', 'player_a_elapsed_ms'])
+            && request.resource.data.player_a_choice is int
+            && request.resource.data.player_a_choice >= 0 && request.resource.data.player_a_choice < 4
+            && request.resource.data.player_a_elapsed_ms is int && request.resource.data.player_a_elapsed_ms >= 0
+            && request.resource.data.player_a_answered_at == request.time)
+          ||
+          (dailyBattleParticipant(battleId)
+            && get(/databases/$(database)/documents/daily_battles/$(battleId)).data.player_b_uid == request.auth.uid
+            && resource.data.player_b_choice == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['player_b_choice', 'player_b_answered_at', 'player_b_elapsed_ms'])
+            && request.resource.data.player_b_choice is int
+            && request.resource.data.player_b_choice >= 0 && request.resource.data.player_b_choice < 4
+            && request.resource.data.player_b_elapsed_ms is int && request.resource.data.player_b_elapsed_ms >= 0
+            && request.resource.data.player_b_answered_at == request.time)
+        );
+
+        allow delete: if false;
       }
     }
 

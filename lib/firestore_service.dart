@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1181,76 +1180,6 @@ class FirestoreService {
   }
 
   // ============================================================
-  // EVENT DEFINITION
-  // ============================================================
-
-  static Future<Map<String, dynamic>?> getEventDefinition(
-    String eventId,
-  ) async {
-    try {
-      final doc = await _db.collection('events').doc(eventId).get();
-
-      if (!doc.exists) {
-        return null;
-      }
-
-      return {
-        'id': doc.id,
-        ...doc.data()!,
-      };
-    } catch (e) {
-      debugPrint(
-        'getEventDefinition error: $e',
-      );
-
-      return null;
-    }
-  }
-
-  static Future<List<Map<String, dynamic>>> getEventTargets(
-    String eventId,
-  ) async {
-    try {
-      final snapshot = await _db
-          .collection('events')
-          .doc(eventId)
-          .collection('targets')
-          .get();
-
-      final targets = <Map<String, dynamic>>[];
-
-      for (final doc in snapshot.docs) {
-        targets.add(
-          {
-            'id': doc.id,
-            ...doc.data(),
-          },
-        );
-      }
-
-      targets.sort(
-        (a, b) {
-          final aOrder = (a['order'] as num?)?.toInt() ?? 999999;
-
-          final bOrder = (b['order'] as num?)?.toInt() ?? 999999;
-
-          return aOrder.compareTo(
-            bOrder,
-          );
-        },
-      );
-
-      return targets;
-    } catch (e) {
-      debugPrint(
-        'getEventTargets error: $e',
-      );
-
-      return [];
-    }
-  }
-
-  // ============================================================
   // EVENT NOTIFICATION
   // ============================================================
 
@@ -1274,758 +1203,169 @@ class FirestoreService {
   }
 
   // ============================================================
-  // EVENT GROUPS
+  // SCAN CHALLENGE
+  //
+  // A single-player replacement for the old group/lobby event flow:
+  // scan a target number of words during the event's window, then
+  // claim a one-time reward. No groups, no invites.
   // ============================================================
 
-  static CollectionReference<Map<String, dynamic>> _eventGroupsCollection(
+  /// Reads an `events/{eventId}` doc (theme, dates, target_count,
+  /// reward_xp, reward_tokens) — the richer definition the admin
+  /// dashboard's event form writes, separate from the lightweight
+  /// config/current_event pointer used for the upcoming/live banner.
+  static Future<Map<String, dynamic>?> getEventDefinition(
     String eventId,
-  ) {
-    return _db.collection('events').doc(eventId).collection('groups');
+  ) async {
+    try {
+      final doc = await _db.collection('events').doc(eventId).get();
+
+      if (!doc.exists) {
+        return null;
+      }
+
+      return {
+        'id': doc.id,
+        ...doc.data()!,
+      };
+    } catch (e) {
+      debugPrint('getEventDefinition error: $e');
+      return null;
+    }
   }
 
-  static String _generateGroupCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-    final random = math.Random.secure();
-
-    return List.generate(
-      6,
-      (_) => chars[random.nextInt(
-        chars.length,
-      )],
-    ).join();
-  }
-
-  // ------------------------------------------------------------
-  // CREATE GROUP
-  // ------------------------------------------------------------
-
-  static Future<Map<String, dynamic>> createEventGroup({
-    required String eventId,
-    required String name,
-    required String type,
+  /// Counts this user's scans within [startAt, endAt] for the challenge
+  /// progress bar, using a server-side aggregate count instead of
+  /// downloading every matching scan_history doc.
+  static Future<int> getEventScanCount({
+    required DateTime startAt,
+    required DateTime endAt,
   }) async {
-    final uid = _uid;
-
-    final normalizedType =
-        type.toLowerCase() == 'private' ? 'private' : 'public';
-
-    final profile = await getProfileOrDefault();
-
-    final profileName = profile['name']?.toString().trim();
-
-    final displayName =
-        profileName == null || profileName.isEmpty ? 'Player' : profileName;
-
-    final groupName =
-        name.trim().isEmpty ? '$displayName\'s Group' : name.trim();
-
-    final groups = _eventGroupsCollection(
-      eventId,
-    );
-
-    String code = '';
-
-    for (int attempt = 0; attempt < 10; attempt++) {
-      final candidate = _generateGroupCode();
-
-      final existing = await groups
+    try {
+      final query = _db
+          .collection('scan_history')
+          .where('user_id', isEqualTo: _uid)
           .where(
-            'code',
-            isEqualTo: candidate,
+            'created_at',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startAt),
           )
-          .limit(1)
-          .get();
+          .where(
+            'created_at',
+            isLessThanOrEqualTo: Timestamp.fromDate(endAt),
+          );
 
-      if (existing.docs.isEmpty) {
-        code = candidate;
-        break;
-      }
-    }
-
-    if (code.isEmpty) {
-      throw Exception(
-        'Could not create a unique group code.',
-      );
-    }
-
-    final groupRef = groups.doc();
-
-    final data = {
-      'event_id': eventId,
-      'name': groupName,
-      'type': normalizedType,
-      'code': code,
-      'leader_id': uid,
-      'member_uids': [uid],
-      'members': [
-        {
-          'uid': uid,
-          'name': displayName,
-        },
-      ],
-      'ready_ids': <String>[],
-      'completed_target_ids': <String>[],
-      'score': 0,
-      'status': 'waiting',
-      'created_at': FieldValue.serverTimestamp(),
-      'updated_at': FieldValue.serverTimestamp(),
-    };
-
-    await groupRef.set(data);
-
-    final saved = await groupRef.get();
-
-    return {
-      'id': groupRef.id,
-      ...saved.data()!,
-    };
-  }
-
-  // ------------------------------------------------------------
-  // PUBLIC GROUPS
-  // ------------------------------------------------------------
-
-  static Future<List<Map<String, dynamic>>> getPublicEventGroups(
-    String eventId,
-  ) async {
-    try {
-      final snapshot = await _eventGroupsCollection(
-        eventId,
-      ).get();
-
-      final groups = <Map<String, dynamic>>[];
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-
-        final type = data['type']?.toString().toLowerCase();
-
-        final status = data['status']?.toString().toLowerCase();
-
-        if (type != 'public' || status != 'waiting') {
-          continue;
-        }
-
-        final members = data['member_uids'];
-
-        final memberCount = members is List ? members.length : 0;
-
-        if (memberCount >= 4) {
-          continue;
-        }
-
-        groups.add(
-          {
-            'id': doc.id,
-            ...data,
-          },
-        );
-      }
-
-      return groups;
+      final result = await query.count().get();
+      return result.count ?? 0;
     } catch (e) {
-      debugPrint(
-        'getPublicEventGroups error: $e',
-      );
-
-      return [];
-    }
-  }
-
-  // ------------------------------------------------------------
-  // GET ONE GROUP
-  // ------------------------------------------------------------
-
-  static Future<Map<String, dynamic>?> getEventGroup(
-    String eventId,
-    String groupId,
-  ) async {
-    final doc = await _eventGroupsCollection(
-      eventId,
-    ).doc(groupId).get();
-
-    if (!doc.exists) {
-      return null;
-    }
-
-    return {
-      'id': doc.id,
-      ...doc.data()!,
-    };
-  }
-
-  // ------------------------------------------------------------
-  // GET MY GROUP
-  // ------------------------------------------------------------
-
-  static Future<Map<String, dynamic>?> getMyEventGroup(
-    String eventId,
-  ) async {
-    try {
-      final snapshot = await _eventGroupsCollection(
-        eventId,
-      ).get();
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-
-        final memberUids = data['member_uids'];
-
-        if (memberUids is List &&
-            memberUids.map((e) => e.toString()).contains(_uid)) {
-          return {
-            'id': doc.id,
-            ...data,
-          };
-        }
-      }
-
-      return null;
-    } catch (e) {
-      debugPrint(
-        'getMyEventGroup error: $e',
-      );
-
-      return null;
-    }
-  }
-
-  // ------------------------------------------------------------
-  // JOIN PUBLIC GROUP
-  // ------------------------------------------------------------
-
-  static Future<Map<String, dynamic>> joinPublicEventGroup({
-    required String eventId,
-    required String groupId,
-  }) async {
-    return _joinEventGroup(
-      eventId: eventId,
-      groupId: groupId,
-      requirePublic: true,
-      code: null,
-    );
-  }
-
-  // ------------------------------------------------------------
-  // JOIN PRIVATE GROUP
-  // ------------------------------------------------------------
-
-  static Future<Map<String, dynamic>> joinPrivateEventGroup({
-    required String eventId,
-    required String code,
-  }) async {
-    final normalized = code.trim().toUpperCase();
-
-    if (normalized.length != 6) {
-      throw Exception(
-        'Group code must contain 6 characters.',
-      );
-    }
-
-    final snapshot = await _eventGroupsCollection(
-      eventId,
-    )
-        .where(
-          'code',
-          isEqualTo: normalized,
-        )
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      throw Exception(
-        'Private group not found.',
-      );
-    }
-
-    return _joinEventGroup(
-      eventId: eventId,
-      groupId: snapshot.docs.first.id,
-      requirePublic: false,
-      code: normalized,
-    );
-  }
-
-  // ------------------------------------------------------------
-  // JOIN ANY GROUP BY INVITE CODE
-  // ------------------------------------------------------------
-  // The same 6-character code can be shared for both public and private
-  // groups. This is what the Event Group Invite button uses.
-  static Future<Map<String, dynamic>> joinEventGroupByCode({
-    required String eventId,
-    required String code,
-  }) async {
-    final normalized = code.trim().toUpperCase();
-
-    if (normalized.length != 6) {
-      throw Exception('Group code must contain 6 characters.');
-    }
-
-    final snapshot = await _eventGroupsCollection(eventId)
-        .where('code', isEqualTo: normalized)
-        .limit(1)
-        .get();
-
-    if (snapshot.docs.isEmpty) {
-      throw Exception('Group not found. Check the invite code.');
-    }
-
-    final group = snapshot.docs.first.data();
-    final status = group['status']?.toString().toLowerCase() ?? 'waiting';
-    if (status != 'waiting') {
-      throw Exception('This group has already started.');
-    }
-
-    return _joinEventGroup(
-      eventId: eventId,
-      groupId: snapshot.docs.first.id,
-      requirePublic: false,
-      code: normalized,
-    );
-  }
-
-  // ------------------------------------------------------------
-  // EVENT GROUP INVITATIONS
-  // ------------------------------------------------------------
-
-  static CollectionReference<Map<String, dynamic>> _eventInvitesCollection(
-      String uid) {
-    return _db.collection('users').doc(uid).collection('event_invites');
-  }
-
-  static Future<List<Map<String, dynamic>>> getEventGroupInvites({
-    required String eventId,
-  }) async {
-    try {
-      final snapshot = await _eventInvitesCollection(_uid)
-          .where('eventId', isEqualTo: eventId)
-          .where('status', isEqualTo: 'pending')
-          .get();
-
-      return snapshot.docs.map((doc) {
-        return {
-          'id': doc.id,
-          ...doc.data(),
-        };
-      }).toList();
-    } catch (e) {
-      debugPrint('getEventGroupInvites error: $e');
-      return [];
-    }
-  }
-
-  static Future<int> getEventGroupInviteCount({
-    required String eventId,
-  }) async {
-    try {
-      final snapshot = await _eventInvitesCollection(_uid)
-          .where('eventId', isEqualTo: eventId)
-          .where('status', isEqualTo: 'pending')
-          .get();
-      return snapshot.docs.length;
-    } catch (e) {
-      debugPrint('getEventGroupInviteCount error: $e');
+      debugPrint('getEventScanCount error: $e');
       return 0;
     }
   }
 
-  static Future<void> sendEventGroupInvite({
+  static Future<bool> hasClaimedEvent(String eventId) async {
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('claimed_events')
+          .doc(eventId)
+          .get();
+
+      return doc.exists;
+    } catch (e) {
+      debugPrint('hasClaimedEvent error: $e');
+      return false;
+    }
+  }
+
+  /// Grants the challenge reward exactly once per user per event.
+  /// Returns true if this call is the one that actually granted it,
+  /// false if it was already claimed earlier.
+  static Future<bool> claimEventReward({
     required String eventId,
-    required String groupId,
-    required String toUid,
-    required String eventName,
+    required int xp,
+    required int tokens,
   }) async {
-    if (toUid == _uid) {
-      throw Exception('You cannot invite yourself.');
-    }
+    final claimRef = _db
+        .collection('users')
+        .doc(_uid)
+        .collection('claimed_events')
+        .doc(eventId);
 
-    final group = await getEventGroup(eventId, groupId);
-    if (group == null) {
-      throw Exception('This group no longer exists.');
-    }
+    final userRef = _db.collection('users').doc(_uid);
 
-    final status = group['status']?.toString().toLowerCase() ?? 'waiting';
-    if (status != 'waiting') {
-      throw Exception('This group has already started.');
-    }
+    return _db.runTransaction<bool>((transaction) async {
+      final claimSnap = await transaction.get(claimRef);
 
-    final memberUids = group['member_uids'];
-    if (memberUids is List &&
-        memberUids.map((e) => e.toString()).contains(toUid)) {
-      throw Exception('This person is already in the group.');
-    }
+      if (claimSnap.exists) {
+        return false;
+      }
 
-    if (memberUids is List && memberUids.length >= 4) {
-      throw Exception('This group is full.');
-    }
+      transaction.set(claimRef, {
+        'claimed_at': FieldValue.serverTimestamp(),
+        'xp': xp,
+        'tokens': tokens,
+      });
 
-    final senderProfile = await getProfileOrDefault();
-    final senderName = senderProfile['name']?.toString().trim();
+      transaction.set(
+        userRef,
+        {
+          'total_xp': FieldValue.increment(xp),
+          'tokens': FieldValue.increment(tokens),
+        },
+        SetOptions(merge: true),
+      );
 
-    final recipient = await _db.collection('users').doc(toUid).get();
-    if (!recipient.exists) {
-      throw Exception('User not found.');
-    }
-
-    final groupType = group['type']?.toString().toLowerCase() ?? 'private';
-    final inviteRef = _eventInvitesCollection(toUid).doc();
-
-    await inviteRef.set({
-      'from': _uid,
-      'fromName':
-          senderName == null || senderName.isEmpty ? 'A friend' : senderName,
-      'to': toUid,
-      'eventId': eventId,
-      'eventName': eventName,
-      'groupId': groupId,
-      'groupName': (group['name'] ?? 'Event Group').toString(),
-      'groupType': groupType,
-      'code': (group['code'] ?? '').toString(),
-      'status': 'pending',
-      'created_at': FieldValue.serverTimestamp(),
+      return true;
     });
   }
 
-  static Future<void> deleteEventGroupInvite({
-    required String eventId,
-    required String inviteId,
-  }) async {
-    await _eventInvitesCollection(_uid).doc(inviteId).delete();
+  // ============================================================
+  // GOBOT USAGE LIMIT
+  //
+  // Free users get a limited number of AI chat messages per day (each
+  // one costs a real Gemini API call); Premium users are unlimited.
+  // Tracked per calendar day (UTC) so it resets on its own with no
+  // cron job needed.
+  // ============================================================
+
+  static const int gobotFreeMessagesPerDay = 10;
+
+  static String _todayKey() {
+    final now = DateTime.now().toUtc();
+    return '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
   }
 
-  // ------------------------------------------------------------
-  // JOIN INTERNAL
-  // ------------------------------------------------------------
+  static Future<int> getGobotMessagesUsedToday() async {
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('gobot_usage')
+          .doc(_todayKey())
+          .get();
 
-  static Future<Map<String, dynamic>> _joinEventGroup({
-    required String eventId,
-    required String groupId,
-    required bool requirePublic,
-    required String? code,
-  }) async {
-    final uid = _uid;
-
-    final profile = await getProfileOrDefault();
-
-    final profileName = profile['name']?.toString().trim();
-
-    final displayName =
-        profileName == null || profileName.isEmpty ? 'Player' : profileName;
-
-    final groupRef = _eventGroupsCollection(
-      eventId,
-    ).doc(groupId);
-
-    await _db.runTransaction(
-      (transaction) async {
-        final snapshot = await transaction.get(groupRef);
-
-        if (!snapshot.exists) {
-          throw Exception(
-            'Group no longer exists.',
-          );
-        }
-
-        final data = snapshot.data()!;
-
-        final type = data['type']?.toString().toLowerCase();
-
-        final status = data['status']?.toString().toLowerCase();
-
-        if (requirePublic && type != 'public') {
-          throw Exception(
-            'This is not a public group.',
-          );
-        }
-
-        if (!requirePublic && code == null && type != 'private') {
-          throw Exception(
-            'This is not a private group.',
-          );
-        }
-
-        if (status != 'waiting') {
-          throw Exception(
-            'This group has already started.',
-          );
-        }
-
-        final memberUids = List<String>.from(
-          data['member_uids'] ?? [],
-        );
-
-        final members = (data['members'] is List)
-            ? List<Map<String, dynamic>>.from(
-                (data['members'] as List).map(
-                  (item) => Map<String, dynamic>.from(
-                    item as Map,
-                  ),
-                ),
-              )
-            : <Map<String, dynamic>>[];
-
-        if (memberUids.contains(uid)) {
-          return;
-        }
-
-        if (memberUids.length >= 4) {
-          throw Exception(
-            'This group is full.',
-          );
-        }
-
-        memberUids.add(uid);
-
-        members.add(
-          {
-            'uid': uid,
-            'name': displayName,
-          },
-        );
-
-        transaction.update(
-          groupRef,
-          {
-            'member_uids': memberUids,
-            'members': members,
-            'updated_at': FieldValue.serverTimestamp(),
-          },
-        );
-      },
-    );
-
-    final result = await groupRef.get();
-
-    return {
-      'id': result.id,
-      ...result.data()!,
-    };
+      return (doc.data()?['count'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      debugPrint('getGobotMessagesUsedToday error: $e');
+      return 0;
+    }
   }
 
-  // ------------------------------------------------------------
-  // READY
-  // ------------------------------------------------------------
-
-  static Future<void> setEventGroupReady({
-    required String eventId,
-    required String groupId,
-    required bool ready,
-  }) async {
-    final ref = _eventGroupsCollection(
-      eventId,
-    ).doc(groupId);
-
-    await ref.update(
+  static Future<void> incrementGobotMessagesUsedToday() async {
+    await _db
+        .collection('users')
+        .doc(_uid)
+        .collection('gobot_usage')
+        .doc(_todayKey())
+        .set(
       {
-        'ready_ids': ready
-            ? FieldValue.arrayUnion(
-                [_uid],
-              )
-            : FieldValue.arrayRemove(
-                [_uid],
-              ),
+        'count': FieldValue.increment(1),
         'updated_at': FieldValue.serverTimestamp(),
       },
-    );
-  }
-
-  // ------------------------------------------------------------
-  // START EVENT
-  // ------------------------------------------------------------
-
-  static Future<void> startEventGroup({
-    required String eventId,
-    required String groupId,
-  }) async {
-    final ref = _eventGroupsCollection(
-      eventId,
-    ).doc(groupId);
-
-    await _db.runTransaction(
-      (transaction) async {
-        final snapshot = await transaction.get(ref);
-
-        if (!snapshot.exists) {
-          throw Exception(
-            'Group no longer exists.',
-          );
-        }
-
-        final data = snapshot.data()!;
-
-        final leaderId = data['leader_id']?.toString();
-
-        if (leaderId != _uid) {
-          throw Exception(
-            'Only the group leader can start the event.',
-          );
-        }
-
-        final memberUids = List<String>.from(
-          data['member_uids'] ?? [],
-        );
-
-        final readyIds = List<String>.from(
-          data['ready_ids'] ?? [],
-        );
-
-        if (memberUids.isEmpty) {
-          throw Exception(
-            'There are no players in this group.',
-          );
-        }
-
-        if (!readyIds.toSet().containsAll(
-              memberUids.toSet(),
-            )) {
-          throw Exception(
-            'Everyone must be ready before starting.',
-          );
-        }
-
-        transaction.update(
-          ref,
-          {
-            'status': 'starting',
-            'started_at': FieldValue.serverTimestamp(),
-            'updated_at': FieldValue.serverTimestamp(),
-          },
-        );
-      },
-    );
-  }
-
-  // ------------------------------------------------------------
-  // COMPLETE EVENT TARGET
-  // ------------------------------------------------------------
-
-  static Future<bool> completeEventTarget({
-    required String eventId,
-    required String groupId,
-    required String targetId,
-    required int points,
-  }) async {
-    final ref = _eventGroupsCollection(
-      eventId,
-    ).doc(groupId);
-
-    bool newlyCompleted = false;
-
-    await _db.runTransaction(
-      (transaction) async {
-        final snapshot = await transaction.get(ref);
-
-        if (!snapshot.exists) {
-          throw Exception(
-            'Group no longer exists.',
-          );
-        }
-
-        final data = snapshot.data()!;
-
-        final completed = List<String>.from(
-          data['completed_target_ids'] ?? [],
-        );
-
-        if (completed.contains(targetId)) {
-          newlyCompleted = false;
-          return;
-        }
-
-        completed.add(
-          targetId,
-        );
-
-        transaction.update(
-          ref,
-          {
-            'completed_target_ids': completed,
-            'score': FieldValue.increment(
-              points,
-            ),
-            'updated_at': FieldValue.serverTimestamp(),
-          },
-        );
-
-        newlyCompleted = true;
-      },
-    );
-
-    return newlyCompleted;
-  }
-
-  // ------------------------------------------------------------
-  // LEAVE GROUP
-  // ------------------------------------------------------------
-
-  static Future<void> leaveEventGroup({
-    required String eventId,
-    required String groupId,
-  }) async {
-    final ref = _eventGroupsCollection(
-      eventId,
-    ).doc(groupId);
-
-    await _db.runTransaction(
-      (transaction) async {
-        final snapshot = await transaction.get(ref);
-
-        if (!snapshot.exists) {
-          return;
-        }
-
-        final data = snapshot.data()!;
-
-        final members = (data['members'] is List)
-            ? List<Map<String, dynamic>>.from(
-                (data['members'] as List).map(
-                  (item) => Map<String, dynamic>.from(
-                    item as Map,
-                  ),
-                ),
-              )
-            : <Map<String, dynamic>>[];
-
-        final memberUids = List<String>.from(
-          data['member_uids'] ?? [],
-        );
-
-        memberUids.remove(_uid);
-
-        members.removeWhere(
-          (member) => member['uid']?.toString() == _uid,
-        );
-
-        if (memberUids.isEmpty) {
-          transaction.delete(ref);
-          return;
-        }
-
-        final leaderId = data['leader_id']?.toString();
-
-        String newLeader = leaderId ?? '';
-
-        if (newLeader == _uid ||
-            !memberUids.contains(
-              newLeader,
-            )) {
-          newLeader = memberUids.first;
-        }
-
-        transaction.update(
-          ref,
-          {
-            'member_uids': memberUids,
-            'members': members,
-            'leader_id': newLeader,
-            'ready_ids': FieldValue.arrayRemove(
-              [_uid],
-            ),
-            'updated_at': FieldValue.serverTimestamp(),
-          },
-        );
-      },
+      SetOptions(merge: true),
     );
   }
 

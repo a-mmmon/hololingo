@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'app_theme.dart';
 import 'firestore_service.dart';
+import 'daily_battle_service.dart';
 import 'edit_profile_screen.dart';
 import 'friends_screen.dart';
 import 'premium_paywall.dart';
@@ -886,6 +887,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: AppColors.textSecondary(dark),
                   fontSize: 12,
                 ),
+              ),
+
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: DailyBattleService.watchMyBadges(),
+                builder: (context, snapshot) {
+                  final badges = snapshot.data ?? [];
+                  if (badges.isEmpty) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ACHIEVEMENTS',
+                          style: TextStyle(
+                            color: AppColors.textSecondary(dark),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: badges.map((badge) {
+                            final eventName = badge['event_name']?.toString() ?? 'Event';
+                            final wins = badge['wins']?.toString() ?? '0';
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFB300).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFFFFB300).withOpacity(0.4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.emoji_events_rounded,
+                                      color: Color(0xFFFFB300), size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '$eventName Champion ($wins wins)',
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFB300),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
 
               const SizedBox(height: 24),

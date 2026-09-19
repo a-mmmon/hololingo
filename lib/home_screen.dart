@@ -5,6 +5,9 @@ import 'app_theme.dart';
 import 'firestore_service.dart';
 import 'saved_screen.dart';
 import 'main.dart';
+import 'coin_battle_screen.dart';
+import 'daily_battle_service.dart';
+import 'daily_challenge_queue_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -158,6 +161,11 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!mounted) return;
 
         _syncNotifyState(profile);
+
+        final eventId = _currentEventId;
+        if (eventId != null) {
+          unawaited(DailyBattleService.checkAndCrownChampionIfEnded(eventId));
+        }
       }
     } catch (e) {
       debugPrint('HomeScreen event error: $e');
@@ -262,6 +270,19 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────
   // IS LIVE?
   // ─────────────────────────────────────────
+
+  String? get _currentEventId {
+    final event = _event;
+    if (event == null) return null;
+
+    final eventName = event['name']?.toString().trim() ?? '';
+    if (eventName.isEmpty) return null;
+
+    final rawEventId = event['event_id']?.toString().trim();
+    return (rawEventId != null && rawEventId.isNotEmpty)
+        ? rawEventId
+        : FirestoreService.eventIdFromName(eventName);
+  }
 
   bool _isEventLive() {
     final start = _getEventStart();
@@ -1054,6 +1075,80 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 20,
               ),
 
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CoinBattleScreen()),
+                ),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.card(dark),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.border(dark)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.monetization_on_rounded,
+                        color: AppColors.cyan,
+                        size: 30,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Coin Battle',
+                              style: TextStyle(
+                                color: AppColors.textPrimary(dark),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              'Wager coins in a 1v1 vocab challenge',
+                              style: TextStyle(
+                                color: AppColors.textSecondary(dark),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textSecondary(dark),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              if (_isEventLive() && _currentEventId != null) ...[
+                const SizedBox(height: 12),
+                _DailyChallengeBanner(eventId: _currentEventId!, dark: dark),
+              ],
+
+              StreamBuilder<Map<String, dynamic>?>(
+                stream: DailyBattleService.watchLastChampion(),
+                builder: (context, snapshot) {
+                  final champion = snapshot.data;
+                  if (champion == null) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _ChampionBanner(champion: champion, dark: dark),
+                  );
+                },
+              ),
+
+              const SizedBox(
+                height: 20,
+              ),
+
               // ───────────────────────
               // RECENTLY SAVED
               // ───────────────────────
@@ -1323,6 +1418,155 @@ class _RecentWordTile extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// DAILY CHALLENGE BANNER
+// ─────────────────────────────────────────────
+//
+// Only shown while an event is live; checks whether the admin has set
+// up today's 10 words before offering the button, so tapping it never
+// leads to an empty challenge.
+
+class _DailyChallengeBanner extends StatefulWidget {
+  final String eventId;
+  final bool dark;
+
+  const _DailyChallengeBanner({required this.eventId, required this.dark});
+
+  @override
+  State<_DailyChallengeBanner> createState() => _DailyChallengeBannerState();
+}
+
+class _DailyChallengeBannerState extends State<_DailyChallengeBanner> {
+  bool _loading = true;
+  bool _available = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final available = await DailyBattleService.hasTodaysChallenge(widget.eventId);
+    if (!mounted) return;
+    setState(() {
+      _available = available;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || !_available) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DailyChallengeQueueScreen(eventId: widget.eventId),
+        ),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF7C4DFF).withOpacity(0.12),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFF7C4DFF).withOpacity(0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.flash_on_rounded, color: Color(0xFF7C4DFF), size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Daily Challenge',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(widget.dark),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Wager ${DailyBattleService.wager} coins — beat another player today',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(widget.dark),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF7C4DFF)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// CHAMPION BANNER
+// ─────────────────────────────────────────────
+//
+// Shown to every user once an event has ended and someone's been
+// crowned — stays until the next event's champion replaces it.
+
+class _ChampionBanner extends StatelessWidget {
+  final Map<String, dynamic> champion;
+  final bool dark;
+
+  const _ChampionBanner({required this.champion, required this.dark});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = champion['name']?.toString() ?? 'A player';
+    final eventName = champion['event_name']?.toString() ?? 'the last event';
+    final wins = champion['wins']?.toString() ?? '0';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB300).withOpacity(0.12),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFFB300).withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFB300), size: 30),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$name won $eventName!',
+                  style: TextStyle(
+                    color: AppColors.textPrimary(dark),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '$wins Daily Challenge wins',
+                  style: TextStyle(
+                    color: AppColors.textSecondary(dark),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

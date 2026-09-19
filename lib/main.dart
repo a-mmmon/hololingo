@@ -22,6 +22,7 @@ import 'detector_service.dart';
 import 'app_theme.dart';
 import 'live_scanner_tab.dart';
 import 'subscription_service.dart';
+import 'coin_battle_service.dart';
 
 List<CameraDescription> cameras = [];
 
@@ -183,6 +184,7 @@ class _AppShellState extends State<AppShell> {
     // Started here (once the user has an authenticated shell) rather than in
     // main(), since restoring/recording a purchase needs a signed-in uid.
     SubscriptionService.init();
+    CoinBattleService.initPurchases();
 
     // Populates the `topics` Firestore collection on the very first run
     // against an empty database; a cheap no-op on every run after that.

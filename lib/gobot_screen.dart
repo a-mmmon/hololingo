@@ -3,6 +3,8 @@ import 'package:firebase_ai/firebase_ai.dart';
 
 import 'app_theme.dart';
 import 'firestore_service.dart';
+import 'premium_paywall.dart';
+import 'premium_status.dart';
 
 class GobotScreen extends StatefulWidget {
   const GobotScreen({super.key});
@@ -19,7 +21,14 @@ class _GobotMessage {
 }
 
 class _GobotScreenState extends State<GobotScreen> {
-  static const String _modelName = 'gemini-2.5-flash';
+  static const String _modelName = 'gemini-3.6-flash';
+
+  static const List<String> _quickPrompts = [
+    'Use one of my words in a sentence',
+    'Quiz me on my saved words',
+    'Give me an easy vocabulary practice',
+    'Explain a word I saved simply',
+  ];
 
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -30,6 +39,11 @@ class _GobotScreenState extends State<GobotScreen> {
   List<Map<String, dynamic>> _savedWords = [];
   bool _loading = true;
   bool _sending = false;
+  bool _isPremium = false;
+  int _usedToday = 0;
+
+  bool get _limitReached =>
+      !_isPremium && _usedToday >= FirestoreService.gobotFreeMessagesPerDay;
 
   @override
   void initState() {
@@ -50,15 +64,24 @@ class _GobotScreenState extends State<GobotScreen> {
       final results = await Future.wait([
         FirestoreService.getSavedWords(),
         FirestoreService.getChatHistory(limit: 30),
+        FirestoreService.getProfileOrDefault(),
       ]);
 
       final words = List<Map<String, dynamic>>.from(results[0] as List);
       final history = List<Map<String, String>>.from(results[1] as List);
+      final profile = results[2] as Map<String, dynamic>;
+      final isPremium = isSubscriptionActive(profile);
+
+      final usedToday = isPremium
+          ? 0
+          : await FirestoreService.getGobotMessagesUsedToday();
 
       if (!mounted) return;
 
       setState(() {
         _savedWords = words;
+        _isPremium = isPremium;
+        _usedToday = usedToday;
         _messages
           ..clear()
           ..addAll(
@@ -105,6 +128,11 @@ class _GobotScreenState extends State<GobotScreen> {
 
   Future<void> _sendMessage([String? preset]) async {
     if (_sending) return;
+
+    if (_limitReached) {
+      await _showLimitReachedDialog();
+      return;
+    }
 
     final text = (preset ?? _controller.text).trim();
     if (text.isEmpty) return;
@@ -163,10 +191,15 @@ Answer the student now.''';
         content: answer,
       );
 
+      if (!_isPremium) {
+        await FirestoreService.incrementGobotMessagesUsedToday();
+      }
+
       if (!mounted) return;
       setState(() {
         _messages.add(_GobotMessage(fromUser: false, text: answer));
         _sending = false;
+        if (!_isPremium) _usedToday++;
       });
       _scrollToBottom();
     } catch (e) {
@@ -181,6 +214,45 @@ Answer the student now.''';
       });
       _scrollToBottom();
     }
+  }
+
+  Future<void> _showLimitReachedDialog() async {
+    final dark = ThemeProvider.isDark(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.card(dark),
+        title: Text(
+          'Daily limit reached',
+          style: TextStyle(color: AppColors.textPrimary(dark)),
+        ),
+        content: Text(
+          "You've used all ${FirestoreService.gobotFreeMessagesPerDay} "
+          'free messages with Holo today. Upgrade to Premium for '
+          'unlimited chats, or come back tomorrow.',
+          style: TextStyle(color: AppColors.textSecondary(dark)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.cyan,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await showPremiumPaywall(context);
+              await _loadChat();
+            },
+            child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _friendlyAiError(Object error) {
@@ -242,6 +314,9 @@ Answer the student now.''';
                     )
                   : _buildConversation(dark),
             ),
+            if (!_loading) _buildUsageIndicator(dark),
+            _buildQuickPrompts(dark),
+            const SizedBox(height: 10),
             _buildComposer(dark),
           ],
         ),
@@ -254,52 +329,68 @@ Answer the student now.''';
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       children: [
-        if (_messages.isEmpty) ...[
-          _suggestion(
-            dark,
-            'Use one of my words in a sentence',
-          ),
-          const SizedBox(height: 12),
-          _suggestion(
-            dark,
-            'Quiz me on my saved words',
-          ),
-          const SizedBox(height: 12),
-          _suggestion(
-            dark,
-            'Give me an easy vocabulary practice',
-          ),
-        ],
         ..._messages.map((message) => _messageBubble(dark, message)),
         if (_sending) _typingBubble(dark),
       ],
     );
   }
 
-  Widget _suggestion(bool dark, String text) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: GestureDetector(
-        onTap: _sending ? null : () => _sendMessage(text),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          decoration: BoxDecoration(
-            color: AppColors.cyan,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(22),
-              topRight: Radius.circular(22),
-              bottomLeft: Radius.circular(22),
-            ),
-          ),
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+  Widget _buildUsageIndicator(bool dark) {
+    final remaining =
+        (FirestoreService.gobotFreeMessagesPerDay - _usedToday).clamp(
+      0,
+      FirestoreService.gobotFreeMessagesPerDay,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Text(
+        _isPremium
+            ? 'Unlimited chats · Premium'
+            : '$remaining of ${FirestoreService.gobotFreeMessagesPerDay} '
+                'free messages left today',
+        style: TextStyle(
+          color: _isPremium
+              ? AppColors.cyan
+              : AppColors.textSecondary(dark),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickPrompts(bool dark) {
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _quickPrompts.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final prompt = _quickPrompts[index];
+          return GestureDetector(
+            onTap: _sending ? null : () => _sendMessage(prompt),
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.card(dark),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: AppColors.border(dark)),
+              ),
+              child: Text(
+                prompt,
+                style: TextStyle(
+                  color: AppColors.textPrimary(dark),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

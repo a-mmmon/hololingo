@@ -9,7 +9,7 @@ import 'premium_paywall.dart';
 import 'premium_status.dart';
 import 'topics_data.dart';
 import 'topic_word_grid_screen.dart';
-import 'event_group_lobby_screen.dart';
+import 'scan_challenge_screen.dart';
 
 class TopicsScreen extends StatefulWidget {
   const TopicsScreen({super.key});
@@ -330,9 +330,8 @@ class _TopicsScreenState extends State<TopicsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => EventGroupLobbyScreen(
+        builder: (_) => ScanChallengeScreen(
           eventId: _eventId,
-          eventName: _eventName,
         ),
       ),
     );
@@ -1062,7 +1061,7 @@ class _LiveEventCard extends StatelessWidget {
               height: 10,
             ),
             const Text(
-              'The event is live! Join a group and start the challenge.',
+              'The event is live! Scan words to complete the challenge.',
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 13,
@@ -1091,7 +1090,7 @@ class _LiveEventCard extends StatelessWidget {
                   ),
                 ),
                 child: const Text(
-                  'Participate',
+                  'View Challenge',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
