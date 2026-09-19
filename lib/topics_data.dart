@@ -93,11 +93,30 @@ class TopicDef {
 /// topic that reuses one of these icons needs zero code changes; adding one
 /// with a genuinely new icon needs one new line here.
 const Map<String, IconData> kTopicIcons = {
+  // Currently used by the 5 seeded topics.
   'home_rounded': Icons.home_rounded,
   'pets_rounded': Icons.pets_rounded,
   'chair_rounded': Icons.chair_rounded,
   'restaurant_rounded': Icons.restaurant_rounded,
   'directions_car_rounded': Icons.directions_car_rounded,
+
+  // Ready for common future topic categories, so adding one of these via
+  // Firestore doesn't need another code change first.
+  'checkroom_rounded': Icons.checkroom_rounded, // Clothing
+  'kitchen_rounded': Icons.kitchen_rounded, // Kitchen
+  'bathtub_rounded': Icons.bathtub_rounded, // Bathroom
+  'school_rounded': Icons.school_rounded, // School / Education
+  'work_rounded': Icons.work_rounded, // Jobs / Occupations
+  'family_restroom_rounded': Icons.family_restroom_rounded, // Family
+  'face_rounded': Icons.face_rounded, // Body parts
+  'palette_rounded': Icons.palette_rounded, // Colors
+  'emoji_emotions_rounded': Icons.emoji_emotions_rounded, // Emotions
+  'wb_sunny_rounded': Icons.wb_sunny_rounded, // Weather
+  'park_rounded': Icons.park_rounded, // Nature / Outdoors
+  'sports_soccer_rounded': Icons.sports_soccer_rounded, // Sports
+  'devices_rounded': Icons.devices_rounded, // Electronics
+  'shopping_bag_rounded': Icons.shopping_bag_rounded, // Shopping
+  'location_city_rounded': Icons.location_city_rounded, // Places / City
 };
 
 /// One-time migration data only — used by FirestoreService.seedTopicsOnce()

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -106,6 +108,10 @@ class _SavedScreenState extends State<SavedScreen> {
           imageUrl: (word['image_url'] ?? '').toString().isEmpty
               ? null
               : (word['image_url'] ?? '').toString(),
+          imageBase64: (word['image_base64'] ?? '').toString().isEmpty
+              ? null
+              : (word['image_base64'] ?? '').toString(),
+          initiallySaved: true,
         ),
       ),
     );
@@ -327,9 +333,30 @@ class _SavedWordCard extends StatelessWidget {
     final definition = (word['definition'] ?? '').toString();
     final imagePath = (word['image_path'] ?? '').toString();
     final imageUrl = (word['image_url'] ?? '').toString();
+    final imageBase64 = (word['image_base64'] ?? '').toString();
 
     Widget leading;
-    if (imageUrl.isNotEmpty) {
+    Uint8List? decodedImage;
+
+    if (imageBase64.isNotEmpty) {
+      try {
+        decodedImage = base64Decode(imageBase64);
+      } catch (_) {
+        decodedImage = null;
+      }
+    }
+
+    if (decodedImage != null) {
+      leading = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.memory(
+          decodedImage,
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+        ),
+      );
+    } else if (imageUrl.isNotEmpty) {
       leading = ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Image.network(

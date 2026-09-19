@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 class DictionaryService {
   static final Map<String, Map<String, String>?> _assetCache = {};
+  static final Map<String, Map<String, String>?> _onlineCache = {};
 
   // Keep these aliases because the object detector may return a slightly
   // different form from the dictionary's canonical word.
@@ -39,6 +41,14 @@ class DictionaryService {
         return 'plant';
       case 'paper cup':
         return 'cup';
+      case 'waterbottle':
+        // The dictionary's own "waterbottle" entry is just a stub
+        // ("Alternative form of water bottle") with no phonetic data at
+        // all, and the concatenated spelling also makes TTS mispronounce
+        // it. "water bottle" isn't in the dictionary assets as its own
+        // headword either, so this relies on the curated fallback entry
+        // below rather than a real dictionary lookup.
+        return 'water bottle';
       default:
         return normalized;
     }
@@ -78,7 +88,25 @@ class DictionaryService {
 
     final assetInfo = await _getAssetWordInfo(normalized);
     if (assetInfo != null) {
+      // The bundled offline dataset never includes phonetic data at all
+      // (verified directly against the JSON — it only has word/etymologies),
+      // so supplement from a real online dictionary when there's a
+      // connection. Best-effort: keeps the offline definition either way
+      // if the network call fails or the word isn't found online.
+      if ((assetInfo['phonetic'] ?? '').isEmpty) {
+        final online = await _getOnlineWordInfo(normalized);
+        final onlinePhonetic = online?['phonetic'] ?? '';
+        if (onlinePhonetic.isNotEmpty) {
+          assetInfo['phonetic'] = onlinePhonetic;
+        }
+      }
       return assetInfo;
+    }
+
+    final online = await _getOnlineWordInfo(normalized);
+    if (online != null) {
+      debugPrint('Dictionary online hit: "$normalized"');
+      return online;
     }
 
     return {
@@ -90,6 +118,51 @@ class DictionaryService {
       'example': '',
       'audio': '',
     };
+  }
+
+  /// Falls back to a real online dictionary (dictionaryapi.dev) for words
+  /// the bundled offline dataset can't fully answer — mainly phonetics,
+  /// which the offline dataset never has, but also as a last-resort full
+  /// lookup for words missing from the offline dataset entirely. Cached
+  /// in memory so a word is only ever fetched once per app session.
+  /// Network failures/timeouts are deliberately NOT cached, since a
+  /// temporary connectivity issue shouldn't permanently block retrying.
+  static Future<Map<String, String>?> _getOnlineWordInfo(
+    String normalized,
+  ) async {
+    if (_onlineCache.containsKey(normalized)) {
+      return _onlineCache[normalized];
+    }
+
+    try {
+      final uri = Uri.parse(
+        'https://api.dictionaryapi.dev/api/v2/entries/en/'
+        '${Uri.encodeComponent(normalized)}',
+      );
+
+      final response = await http.get(uri).timeout(
+            const Duration(seconds: 6),
+          );
+
+      if (response.statusCode != 200) {
+        // A real "not found" (404) — cache it so we don't keep asking.
+        _onlineCache[normalized] = null;
+        return null;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List || decoded.isEmpty) {
+        _onlineCache[normalized] = null;
+        return null;
+      }
+
+      final result = _parseEntry(normalized, decoded);
+      _onlineCache[normalized] = result;
+      return result;
+    } catch (e) {
+      debugPrint('Dictionary online lookup failed for "$normalized": $e');
+      return null;
+    }
   }
 
   static Future<Map<String, String>?> _getAssetWordInfo(
@@ -436,6 +509,20 @@ class DictionaryService {
       'definition':
           'A device that produces light, usually for illuminating a room or area.',
       'example': 'I turned on the lamp to read my book.',
+    },
+    'water bottle': {
+      'phonetic': '/ˈwɔː.tər ˌbɒt.əl/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A container, usually made of plastic or metal, used for carrying drinking water.',
+      'example': 'She filled her water bottle before the hike.',
+    },
+    'monitor': {
+      'phonetic': '/ˈmɒn.ɪ.tər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A screen used to display output from a computer, similar to a television.',
+      'example': 'The information flashed up on the monitor.',
     },
     'phone': {
       'phonetic': '/fəʊn/',

@@ -1223,9 +1223,6 @@ PODS:
   - Firebase/Firestore (12.18.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 12.18.0)
-  - Firebase/Storage (12.18.0):
-    - Firebase/CoreOnly
-    - FirebaseStorage (~> 12.18.0)
   - firebase_ai (3.15.0):
     - Flutter
   - firebase_app_check (0.4.7):
@@ -1239,10 +1236,6 @@ PODS:
     - Flutter
   - firebase_core (4.14.0):
     - Firebase/CoreOnly (= 12.18.0)
-    - Flutter
-  - firebase_storage (13.5.0):
-    - Firebase/Storage (= 12.18.0)
-    - firebase_core
     - Flutter
   - FirebaseAppCheck (12.18.0):
     - AppCheckCore (~> 11.3)
@@ -1290,13 +1283,6 @@ PODS:
     - leveldb-library (~> 1.22)
     - nanopb (~> 3.30910.0)
   - FirebaseSharedSwift (12.18.0)
-  - FirebaseStorage (12.18.0):
-    - FirebaseAppCheckInterop (~> 12.18.0)
-    - FirebaseAuthInterop (~> 12.18.0)
-    - FirebaseCore (~> 12.18.0)
-    - FirebaseCoreExtension (~> 12.18.0)
-    - GoogleUtilities/Environment (~> 8.1)
-    - GTMSessionFetcher/Core (< 6.0, >= 3.4)
   - Flutter (1.0.0)
   - flutter_tts (0.0.1):
     - Flutter
@@ -1488,7 +1474,6 @@ DEPENDENCIES:
   - firebase_app_check (from `.symlinks/plugins/firebase_app_check/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
-  - firebase_storage (from `.symlinks/plugins/firebase_storage/ios`)
   - Flutter (from `Flutter`)
   - flutter_tts (from `.symlinks/plugins/flutter_tts/ios`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
@@ -1516,7 +1501,6 @@ SPEC REPOS:
     - FirebaseFirestore
     - FirebaseFirestoreInternal
     - FirebaseSharedSwift
-    - FirebaseStorage
     - GLTFSceneKit
     - GoogleSignIn
     - GoogleUtilities
@@ -1547,8 +1531,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/firebase_auth/ios"
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
-  firebase_storage:
-    :path: ".symlinks/plugins/firebase_storage/ios"
   Flutter:
     :path: Flutter
   flutter_tts:
@@ -1581,7 +1563,6 @@ SPEC CHECKSUMS:
   firebase_app_check: 1745908cb7f876fae823707a18e5ad1a21a9d083
   firebase_auth: 4c0f66df5d18671fd5ce6d6e9eb5ebdb653e03e5
   firebase_core: 22b31970001508f6e63945bedcb7b9de68819aa5
-  firebase_storage: d29b933001ab3621acf6b45871a7f981e3e2448b
   FirebaseAppCheck: 06fc2eca9cc0499dc393f9d4320faeb373b24851
   FirebaseAppCheckInterop: 8c2fe8b563377bd948ee6acc2871fe2dfb3a034a
   FirebaseAuth: 389097b0c63059262aa02800cb0b93c9fab09130
@@ -1592,7 +1573,6 @@ SPEC CHECKSUMS:
   FirebaseFirestore: a319a7476f34b7f6a0c9e7b123e0506681cc1f1f
   FirebaseFirestoreInternal: fb923514fda3f48f61ffe588d662bc37a5c60bb2
   FirebaseSharedSwift: 9d9404eea60b650d3e549898bfebbb8f665fe601
-  FirebaseStorage: 6dc90a86bf2a8f1dc54a6ca659ae9898465e10a0
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_tts: 35ac3c7d42412733e795ea96ad2d7e05d0a75113
   GLTFSceneKit: d1b437c514ba2aed5555afb0fddd64e030612d57

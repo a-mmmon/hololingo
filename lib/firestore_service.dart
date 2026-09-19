@@ -1,8 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 
 import 'topics_data.dart';
 
@@ -49,6 +52,23 @@ class FirestoreService {
       'updated_at': FieldValue.serverTimestamp(),
     };
 
+    // image_path is a local file path inside this app install's sandboxed
+    // container, which iOS invalidates on every reinstall — so it can't be
+    // relied on to persist. Embed a downscaled copy directly in the
+    // document instead (no Cloud Storage/Blaze plan needed); image_path
+    // stays as a same-session fallback for screens that haven't reloaded.
+    final localImagePath = (word['image_path'] ?? '').toString();
+    final hasEmbeddedImage =
+        (word['image_base64'] ?? '').toString().isNotEmpty;
+
+    if (localImagePath.isNotEmpty && !hasEmbeddedImage) {
+      final encoded = await _encodeWordImageBase64(localImagePath);
+
+      if (encoded != null) {
+        data['image_base64'] = encoded;
+      }
+    }
+
     if (!existing.exists) {
       data['created_at'] = FieldValue.serverTimestamp();
       data['times_reviewed'] = 0;
@@ -68,6 +88,63 @@ class FirestoreService {
         },
         SetOptions(merge: true),
       );
+    }
+  }
+
+  /// Downscales a local cutout and returns it as a base64 PNG string, or
+  /// null if the file is missing, unreadable, or still too large to embed
+  /// safely after resizing. Kept as PNG (not JPEG) so the cutout's
+  /// transparent background still blends into whatever card color it's
+  /// shown on, rather than being flattened to a solid fill.
+  ///
+  /// This is stored directly on the saved_words document (no Cloud
+  /// Storage/Blaze plan needed) — Firestore caps a document at 1MiB, so
+  /// the image has to stay small and leave headroom for the doc's other
+  /// fields.
+  static Future<String?> _encodeWordImageBase64(
+    String localPath,
+  ) async {
+    try {
+      final file = File(localPath);
+
+      if (!await file.exists()) {
+        return null;
+      }
+
+      final bytes = await file.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+
+      if (decoded == null) {
+        return null;
+      }
+
+      const maxDimension = 360;
+
+      final resized = (decoded.width > maxDimension ||
+              decoded.height > maxDimension)
+          ? img.copyResize(
+              decoded,
+              width: decoded.width >= decoded.height ? maxDimension : null,
+              height: decoded.height > decoded.width ? maxDimension : null,
+            )
+          : decoded;
+
+      final encodedBytes = img.encodePng(resized, level: 9);
+
+      const maxBytes = 700 * 1024;
+
+      if (encodedBytes.length > maxBytes) {
+        debugPrint(
+          'Cutout still ${encodedBytes.length} bytes after resize, '
+          'skipping embed.',
+        );
+        return null;
+      }
+
+      return base64Encode(encodedBytes);
+    } catch (e) {
+      debugPrint('encodeWordImageBase64 error: $e');
+      return null;
     }
   }
 
@@ -108,22 +185,28 @@ class FirestoreService {
     return snap.docs.map((d) => d.data()).toList();
   }
 
-  /// Live version of getSavedWords(), for the Home screen. The bottom nav
-  /// keeps every tab alive in an IndexedStack with a const HomeScreen
-  /// widget, so HomeScreen's State is created once and never rebuilt from
-  /// scratch — a one-time Future fetch in initState only ever reflects
-  /// whatever was saved at the moment the app launched. A live stream
-  /// (same fix already used for the profile stats) keeps this current
-  /// without depending on the widget itself rebuilding.
+  /// Live version of getSavedWords(), for any screen kept alive by the
+  /// bottom nav's IndexedStack (Home, Review, ...) — those screens' State
+  /// is created once and never rebuilt from scratch, so a one-time Future
+  /// fetch in initState only ever reflects whatever was saved at the
+  /// moment that tab was first built. A live stream (same fix already
+  /// used for the profile stats) keeps this current without depending on
+  /// the widget itself rebuilding. Pass null for the full list (e.g. the
+  /// Review screen); Home passes a small limit for its preview section.
   static Stream<List<Map<String, dynamic>>> watchSavedWords({
-    int limit = 5,
+    int? limit = 5,
   }) {
-    return _db
+    Query<Map<String, dynamic>> query = _db
         .collection('users')
         .doc(_uid)
         .collection('saved_words')
-        .orderBy('created_at', descending: true)
-        .limit(limit)
+        .orderBy('created_at', descending: true);
+
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    return query
         .snapshots()
         .map((snap) => snap.docs.map((d) => d.data()).toList());
   }

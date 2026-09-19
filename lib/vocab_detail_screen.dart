@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ class VocabDetailScreen extends StatefulWidget {
   final String example;
   final String? imagePath;
   final String? imageUrl;
+  final String? imageBase64;
+  final bool initiallySaved;
 
   const VocabDetailScreen({
     super.key,
@@ -22,6 +25,8 @@ class VocabDetailScreen extends StatefulWidget {
     required this.example,
     this.imagePath,
     this.imageUrl,
+    this.imageBase64,
+    this.initiallySaved = false,
   });
 
   @override
@@ -37,6 +42,7 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _saved = widget.initiallySaved;
     _initTts();
   }
 
@@ -96,6 +102,7 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
       'example': widget.example,
       'image_path': widget.imagePath ?? '',
       'image_url': widget.imageUrl ?? '',
+      'image_base64': widget.imageBase64 ?? '',
       'note': _noteController.text,
     });
     if (!mounted) return;
@@ -111,8 +118,23 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
   }
 
   Widget _buildWordImage() {
+    final imageBase64 = widget.imageBase64?.trim() ?? '';
     final imageUrl = widget.imageUrl?.trim() ?? '';
     final imagePath = widget.imagePath?.trim() ?? '';
+
+    if (imageBase64.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(imageBase64),
+          width: 220,
+          height: 220,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _imagePlaceholder(),
+        );
+      } catch (_) {
+        // Fall through to the other sources below.
+      }
+    }
 
     if (imageUrl.isNotEmpty) {
       return Image.network(
@@ -249,7 +271,8 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
                                 fontSize: 15,
                                 fontStyle: FontStyle.italic)),
                       ),
-                    if ((widget.imageUrl ?? '').isNotEmpty ||
+                    if ((widget.imageBase64 ?? '').isNotEmpty ||
+                        (widget.imageUrl ?? '').isNotEmpty ||
                         (widget.imagePath ?? '').isNotEmpty) ...[
                       const SizedBox(height: 20),
                       Center(

@@ -12,71 +12,91 @@ class ReviewScreen extends StatefulWidget {
 }
 
 class _ReviewScreenState extends State<ReviewScreen> {
-  List<Map<String, dynamic>> _savedWords = [];
-  bool _loading = true;
+  // Live stream, not a one-time fetch: the bottom nav's IndexedStack keeps
+  // this screen's State alive forever after the first build, so a Future
+  // fetched once in initState would never notice a word saved afterward.
+  Stream<List<Map<String, dynamic>>>? _savedWordsStream;
+
   String _reviewFrequency = 'weekly';
 
   @override
-  void initState() { super.initState(); _loadWords(); }
+  void initState() {
+    super.initState();
+    _savedWordsStream = DatabaseService.watchSavedWords(limit: null);
+    _loadProfile();
+    _repairBrokenDefinitionsOnce();
+  }
 
-  Future<void> _loadWords() async {
+  Future<void> _loadProfile() async {
     try {
-      final words = await DatabaseService.getSavedWords();
       final profile = await FirestoreService.getProfileOrDefault();
-      final fixedWords = <Map<String, dynamic>>[];
+      if (!mounted) return;
 
-      for (final word in words) {
-        final copy = Map<String, dynamic>.from(word);
-        final wordName = (copy['word'] ?? '').toString();
-        final oldDefinition = (copy['definition'] ?? '').toString();
+      final frequency =
+          profile['review_reminder_frequency']?.toString().toLowerCase();
 
-        final needsDefinition = wordName.isNotEmpty &&
-            (oldDefinition.trim().isEmpty ||
-                oldDefinition.toLowerCase().contains('could not load definition') ||
-                oldDefinition.toLowerCase().contains(
-                  'vocabulary information has not been added',
-                ));
-
-        if (needsDefinition) {
-          try {
-            final info = await DictionaryService.getWordInfo(wordName);
-            copy['phonetic'] = info['phonetic'] ?? copy['phonetic'] ?? '';
-            copy['definition'] = info['definition'] ?? copy['definition'] ?? '';
-            copy['example'] = info['example'] ?? copy['example'] ?? '';
-
-            await DatabaseService.updateSavedWord(wordName, {
-              'phonetic': copy['phonetic'],
-              'definition': copy['definition'],
-              'example': copy['example'],
-            });
-          } catch (e) {
-            debugPrint('Could not repair $wordName: $e');
-          }
-        }
-
-        fixedWords.add(copy);
-      }
-
-      if (mounted) {
-        final frequency =
-            profile['review_reminder_frequency']?.toString().toLowerCase();
-
-        setState(() {
-          _savedWords = fixedWords;
-          _reviewFrequency = frequency == 'monthly' ? 'monthly' : 'weekly';
-          _loading = false;
-        });
-      }
+      setState(() {
+        _reviewFrequency = frequency == 'monthly' ? 'monthly' : 'weekly';
+      });
     } catch (e) {
-      debugPrint('ReviewScreen load error: $e');
-      if (mounted) setState(() => _loading = false);
+      debugPrint('ReviewScreen profile error: $e');
     }
   }
 
-  List<Map<String, dynamic>> get _needsReview {
-    if (_savedWords.isEmpty) return [];
-    final count = (_savedWords.length * 0.2).ceil().clamp(1, _savedWords.length);
-    return _savedWords.take(count).toList();
+  // One-time maintenance pass, not tied to the live stream above — this
+  // writes back to Firestore, so running it on every stream tick would
+  // redundantly re-check every saved word each time any one of them
+  // changes. A single pass per screen visit is enough to backfill entries
+  // saved before a definition was available.
+  Future<void> _repairBrokenDefinitionsOnce() async {
+    try {
+      final words = await DatabaseService.getSavedWords();
+
+      for (final word in words) {
+        final wordName = (word['word'] ?? '').toString();
+        if (wordName.isEmpty) continue;
+
+        final oldDefinition = (word['definition'] ?? '').toString();
+
+        final needsDefinition = oldDefinition.trim().isEmpty ||
+            oldDefinition.toLowerCase().contains('could not load definition') ||
+            oldDefinition.toLowerCase().contains(
+              'vocabulary information has not been added',
+            );
+
+        // dictionary_service.dart's curated _fallbackVocabulary is the
+        // source of truth for common object words. If a word was saved
+        // before a curated entry existed for it (or before one got
+        // corrected — e.g. "monitor" briefly resolving to the wrong
+        // dictionary sense), it stays stuck with the old text forever
+        // unless resynced here.
+        final curated = DictionaryService.getLocalWordInfo(wordName);
+        final outOfSyncWithCurated =
+            curated != null && curated['definition'] != oldDefinition;
+
+        if (!needsDefinition && !outOfSyncWithCurated) continue;
+
+        try {
+          final info = curated ?? await DictionaryService.getWordInfo(wordName);
+
+          await DatabaseService.updateSavedWord(wordName, {
+            'phonetic': info['phonetic'] ?? word['phonetic'] ?? '',
+            'definition': info['definition'] ?? word['definition'] ?? '',
+            'example': info['example'] ?? word['example'] ?? '',
+          });
+        } catch (e) {
+          debugPrint('Could not repair $wordName: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('ReviewScreen repair error: $e');
+    }
+  }
+
+  List<Map<String, dynamic>> _needsReview(List<Map<String, dynamic>> savedWords) {
+    if (savedWords.isEmpty) return [];
+    final count = (savedWords.length * 0.2).ceil().clamp(1, savedWords.length);
+    return savedWords.take(count).toList();
   }
 
   @override
@@ -85,20 +105,31 @@ class _ReviewScreenState extends State<ReviewScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg(dark),
       body: SafeArea(
-        child: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.cyan))
-          : SingleChildScrollView(
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _savedWordsStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.cyan),
+              );
+            }
+
+            final savedWords = snapshot.data ?? [];
+            final needsReview = _needsReview(savedWords);
+
+            return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Review', style: TextStyle(
                   fontSize: 30, fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary(dark), letterSpacing: -0.5)),
                 const SizedBox(height: 4),
-                Text('${_savedWords.length} words saved · ${_needsReview.length} need review',
+                Text('${savedWords.length} words saved · ${needsReview.length} need review',
                   style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13)),
                 const SizedBox(height: 20),
                 _ReviewProgressCard(
-                  total: _savedWords.length,
+                  total: savedWords.length,
                   frequency: _reviewFrequency,
                   dark: dark,
                 ),
@@ -108,24 +139,26 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     icon: Icons.quiz_rounded, label: 'Start Quiz',
                     subtitle: '5 questions', color: AppColors.cyan,
                     dark: dark,
-                    onTap: _savedWords.isEmpty ? null : () => Navigator.push(context,
+                    onTap: savedWords.isEmpty ? null : () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const QuizScreen())),
                   )),
                   const SizedBox(width: 14),
                   Expanded(child: _ActionCard(
                     icon: Icons.style_rounded, label: 'Flashcards',
-                    subtitle: '${_savedWords.length} cards', color: AppColors.flame,
+                    subtitle: '${savedWords.length} cards', color: AppColors.flame,
                     dark: dark,
-                    onTap: _savedWords.isEmpty ? null : () => _showFlashcards(),
+                    onTap: savedWords.isEmpty
+                        ? null
+                        : () => _showFlashcards(savedWords),
                   )),
                 ]),
-                if (_needsReview.isNotEmpty) ...[
+                if (needsReview.isNotEmpty) ...[
                   const SizedBox(height: 28),
                   Text('Needs Review', style: TextStyle(
                     fontSize: 17, fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary(dark))),
                   const SizedBox(height: 12),
-                  ..._needsReview.map((w) => _ReviewWordTile(
+                  ...needsReview.map((w) => _ReviewWordTile(
                     word: w['word'] ?? '', definition: w['definition'] ?? '',
                     phonetic: w['phonetic'] ?? '', dark: dark,
                     onTap: () => Navigator.push(
@@ -139,11 +172,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
                           imagePath: (w['image_path'] ?? '').toString().isEmpty
                               ? null
                               : (w['image_path'] ?? '').toString(),
+                          initiallySaved: true,
                         ),
                       ),
                     ))),
                 ],
-                if (_savedWords.isEmpty)
+                if (savedWords.isEmpty)
                   Center(child: Padding(
                     padding: const EdgeInsets.only(top: 60),
                     child: Column(children: [
@@ -156,14 +190,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     ]),
                   )),
               ]),
-            ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  void _showFlashcards() => showModalBottomSheet(
+  void _showFlashcards(List<Map<String, dynamic>> savedWords) => showModalBottomSheet(
     context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-    builder: (_) => _FlashcardSheet(words: _savedWords,
+    builder: (_) => _FlashcardSheet(words: savedWords,
       dark: ThemeProvider.isDark(context)));
 }
 

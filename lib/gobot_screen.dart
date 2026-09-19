@@ -19,7 +19,7 @@ class _GobotMessage {
 }
 
 class _GobotScreenState extends State<GobotScreen> {
-  static const String _modelName = 'gemini-3.7-flash';
+  static const String _modelName = 'gemini-2.5-flash';
 
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();

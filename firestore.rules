@@ -197,8 +197,7 @@ service cloud.firestore {
     // through the Firebase Console or admin panel, not through the app.
     match /topics/{topicId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if false;
+      allow create, update, delete: if isModerator();
     }
 
     match /events/{eventId} {

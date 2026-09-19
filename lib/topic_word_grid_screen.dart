@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,7 +9,6 @@ import 'firestore_service.dart';
 import 'topics_data.dart';
 import 'topic_complete_screen.dart';
 import 'topic_capture_screen.dart';
-import 'ar_anchor_screen.dart';
 
 class TopicWordGridScreen extends StatefulWidget {
   final TopicDef topic;
@@ -25,6 +25,8 @@ class TopicWordGridScreen extends StatefulWidget {
 class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
   Set<String> _learned = {};
   Map<String, String> _imagePaths = {};
+  Map<String, String> _imageUrls = {};
+  Map<String, String> _imageBase64s = {};
 
   bool _loading = true;
   bool _changed = false;
@@ -53,10 +55,30 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
       if (!mounted) return;
 
       final imagePaths = <String, String>{};
+      final imageUrls = <String, String>{};
+      final imageBase64s = <String, String>{};
+
       for (final savedWord in savedWords) {
         final word = (savedWord['word'] ?? '').toString().toLowerCase();
+        final imageBase64 = (savedWord['image_base64'] ?? '').toString();
+        final imageUrl = (savedWord['image_url'] ?? '').toString();
         final imagePath = (savedWord['image_path'] ?? '').toString();
-        if (word.isNotEmpty && imagePath.isNotEmpty) {
+
+        if (word.isEmpty) continue;
+
+        if (imageBase64.isNotEmpty) {
+          imageBase64s[word] = imageBase64;
+        }
+
+        if (imageUrl.isNotEmpty) {
+          imageUrls[word] = imageUrl;
+        }
+
+        // image_base64 is embedded in the document and always durable;
+        // image_url would be Cloud Storage (not currently used); image_path
+        // is only a same-install local fallback for words saved before
+        // embedding existed, or if encoding failed.
+        if (imagePath.isNotEmpty) {
           final persistentPath = await _persistImage(imagePath, word);
           final usablePath = persistentPath ?? imagePath;
           imagePaths[word] = usablePath;
@@ -73,6 +95,8 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
       setState(() {
         _learned = learned.toSet();
         _imagePaths = imagePaths;
+        _imageUrls = imageUrls;
+        _imageBase64s = imageBase64s;
         _loading = false;
       });
     } catch (e) {
@@ -128,23 +152,9 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
     if (!mounted) return;
 
-    final finalWord = (result.detectedWord ?? word.word).trim();
-
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ARAnchorScreen(
-          word: finalWord.isNotEmpty ? finalWord : word.word,
-          phonetic: result.phonetic ?? '',
-          partOfSpeech: result.partOfSpeech ?? 'Noun',
-          definition: result.definition ?? '',
-          example: result.example ?? '',
-          imagePath: imagePath,
-        ),
-      ),
-    );
-
-    if (!mounted) return;
+    // Topic capture is its own feature, separate from the AR scan flow —
+    // success is shown by the word tile itself (green border + cutout
+    // image once learned), not by opening the AR camera screen.
 
     // ==========================================================
     // SAVE PROGRESS
@@ -431,10 +441,16 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
                               final imagePath =
                                   _imagePaths[word.word.toLowerCase()];
+                              final imageUrl =
+                                  _imageUrls[word.word.toLowerCase()];
+                              final imageBase64 =
+                                  _imageBase64s[word.word.toLowerCase()];
                               return _WordTile(
                                 word: word,
                                 learned: learned,
                                 imagePath: imagePath,
+                                imageUrl: imageUrl,
+                                imageBase64: imageBase64,
                                 topicColor: widget.topic.color,
                                 dark: dark,
                                 onTap: () => _tapWord(
@@ -507,6 +523,8 @@ class _WordTile extends StatelessWidget {
   final TopicWord word;
   final bool learned;
   final String? imagePath;
+  final String? imageUrl;
+  final String? imageBase64;
   final Color topicColor;
   final bool dark;
   final VoidCallback? onTap;
@@ -515,14 +533,53 @@ class _WordTile extends StatelessWidget {
     required this.word,
     required this.learned,
     required this.imagePath,
+    required this.imageUrl,
+    required this.imageBase64,
     required this.topicColor,
     required this.dark,
     required this.onTap,
   });
 
+  Widget? _buildImage() {
+    final base64 = imageBase64?.trim() ?? '';
+    final url = imageUrl?.trim() ?? '';
+    final path = imagePath?.trim() ?? '';
+
+    if (base64.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(base64),
+          fit: BoxFit.contain,
+        );
+      } catch (_) {
+        // Fall through to the other sources below.
+      }
+    }
+
+    if (url.isNotEmpty) {
+      return Image.network(
+        url,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) {
+          if (path.isNotEmpty && File(path).existsSync()) {
+            return Image.file(File(path), fit: BoxFit.contain);
+          }
+          return const SizedBox.shrink();
+        },
+      );
+    }
+
+    if (path.isNotEmpty && File(path).existsSync()) {
+      return Image.file(File(path), fit: BoxFit.contain);
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final borderColor = learned ? Colors.green : AppColors.border(dark);
+    final image = learned ? _buildImage() : null;
 
     return GestureDetector(
       onTap: onTap,
@@ -542,14 +599,11 @@ class _WordTile extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (learned && imagePath != null && File(imagePath!).existsSync())
+              if (image != null)
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Image.file(
-                      File(imagePath!),
-                      fit: BoxFit.contain,
-                    ),
+                    child: image,
                   ),
                 ),
 

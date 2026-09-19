@@ -50,10 +50,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
   bool _initializing = true;
   bool _capturing = false;
-  bool _processingFrame = false;
-  bool _streaming = false;
-  int _stableMatches = 0;
-  CameraImage? _lastCameraImage;
 
   String? _errorMessage;
 
@@ -125,8 +121,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
         _initializing = false;
         _errorMessage = null;
       });
-
-      await _startLiveDetection();
     } catch (e) {
       debugPrint(
         'TopicCaptureScreen camera error: $e',
@@ -143,7 +137,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
   @override
   void dispose() {
-    _stopLiveDetection();
     _controller?.dispose();
     _tts.stop();
     super.dispose();
@@ -154,159 +147,12 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     Navigator.of(context).pop();
   }
 
-  Future<void> _startLiveDetection() async {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized || _streaming) {
-      return;
-    }
-
-    try {
-      await controller.startImageStream(_processLiveFrame);
-      _streaming = true;
-    } catch (e) {
-      debugPrint('TopicCapture live stream error: $e');
-    }
-  }
-
-  Future<void> _stopLiveDetection() async {
-    final controller = _controller;
-    if (controller == null || !_streaming) return;
-
-    try {
-      if (controller.value.isStreamingImages) {
-        await controller.stopImageStream();
-      }
-    } catch (e) {
-      debugPrint('TopicCapture stop stream error: $e');
-    }
-    _streaming = false;
-  }
-
-  Future<void> _processLiveFrame(CameraImage image) async {
-    if (_processingFrame || _capturing || !mounted) return;
-
-    _lastCameraImage = image;
-    _processingFrame = true;
-
-    try {
-      final detected = await DetectorService.detectCameraImage(
-        image,
-        targetLabel: widget.word.word,
-      );
-      if (!mounted || _capturing) return;
-
-      if (detected != null && _isCorrectObjectLabel(detected)) {
-        _stableMatches++;
-      } else {
-        _stableMatches = 0;
-      }
-
-      if (_stableMatches >= 3) {
-        await _finishLiveCapture();
-      }
-    } catch (e) {
-      debugPrint('TopicCapture live detection error: $e');
-    } finally {
-      _processingFrame = false;
-    }
-  }
-
-  bool _isCorrectObjectLabel(String detected) {
-    final normalized = _normalize(detected);
-    final expected = _normalize(widget.word.word);
-    if (normalized == null || expected == null) return false;
-    if (normalized == expected) return true;
-
-    const aliases = <String, List<String>>{
-      'laptop': ['laptop', 'notebook'],
-      'cell phone': [
-        'cell phone',
-        'cellphone',
-        'mobile phone',
-        'mobile',
-        'phone'
-      ],
-      'bicycle': ['bicycle', 'bike'],
-      'scissors': ['scissors', 'scissor'],
-      'cup': ['cup', 'coffee cup', 'mug'],
-      'bottle': ['bottle'],
-      'chair': ['chair', 'office chair'],
-    };
-
-    return aliases[expected]?.contains(normalized) ?? false;
-  }
-
-  Future<void> _finishLiveCapture() async {
-    if (!mounted || _capturing) return;
-
-    setState(() {
-      _capturing = true;
-      _errorMessage = null;
-    });
-    await _stopLiveDetection();
-
-    final frame = _lastCameraImage;
-    if (frame == null) {
-      if (mounted) {
-        setState(() {
-          _capturing = false;
-          _errorMessage = 'Could not capture the detected object. Try again.';
-        });
-      }
-      return;
-    }
-
-    final framePath = await DetectorService.saveCameraImage(frame);
-    if (framePath == null) {
-      if (mounted) setState(() => _capturing = false);
-      return;
-    }
-
-    final details = await DetectorService.detectObjectDetails(
-      framePath,
-      targetLabel: widget.word.word,
-    );
-    if (details == null) {
-      if (mounted) {
-        setState(() {
-          _capturing = false;
-          _errorMessage =
-              'The object moved. Aim the camera at it and try again.';
-        });
-        await _startLiveDetection();
-      }
-      return;
-    }
-
-    String? processedPath = await DetectorService.removeBackground(
-      framePath,
-      centerX: details.centerX,
-      centerY: details.centerY,
-    );
-    processedPath ??= framePath;
-
-    await _loadDefinitionForDetectedWord(widget.word.word);
-
-    if (!mounted) return;
-    setState(() {
-      _originalImagePath = framePath;
-      _capturedImagePath = processedPath;
-      _detectedWord = details.label;
-      _detectedConfidence = details.confidence;
-      _capturing = false;
-    });
-  }
-
-  Future<void> _loadDefinitionForDetectedWord(String word) async {
-    try {
-      final info = await DictionaryService.getWordInfo(word);
-      _phonetic = info['phonetic'] ?? '';
-      _definition = info['definition'] ?? '';
-      _example = info['example'] ?? '';
-    } catch (e) {
-      debugPrint('TopicCapture definition error: $e');
-    }
-  }
+  // Object detection here runs only when the user taps the capture button
+  // (see _capture() below) — not continuously in the background. Running
+  // inference on every camera frame regardless of user intent was both
+  // why this screen felt like it was "always scanning" rather than
+  // waiting for a deliberate capture, and why the camera felt slow (the
+  // CPU was constantly busy running detection even while just aiming).
 
   Future<void> _capture() async {
     final controller = _controller;
@@ -457,8 +303,6 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       _loadingDefinition = false;
       _errorMessage = null;
     });
-    _stableMatches = 0;
-    _startLiveDetection();
   }
 
   String? _normalize(String? value) {
@@ -790,7 +634,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
               ),
               const SizedBox(height: 16),
               GestureDetector(
-                onTap: _capturing ? null : _finishLiveCapture,
+                onTap: _capturing ? null : _capture,
                 child: Container(
                   width: 76,
                   height: 76,

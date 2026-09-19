@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import 'firestore_service.dart';
@@ -22,7 +23,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isUploadingPhoto = false;
 
   File? _pickedPhoto;
-  String? _photoUrl;
+  String? _photoBase64;
 
   @override
   void initState() {
@@ -36,7 +37,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() {
       _nameController.text = data['name'] ?? '';
       _cityController.text = data['city'] ?? 'Bangkok';
-      _photoUrl = data['photo_url']?.toString();
+      _photoBase64 = data['photo_base64']?.toString();
       _isLoading = false;
     });
   }
@@ -65,26 +66,40 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  Future<String?> _uploadPhotoIfNeeded() async {
+  // Firebase Storage would need the Blaze billing plan, which this project
+  // isn't on — so the avatar is downscaled and embedded directly in the
+  // profile document instead, same approach as saved words' cutout images.
+  Future<String?> _encodePhotoIfNeeded() async {
     final file = _pickedPhoto;
-    if (file == null) return _photoUrl;
+    if (file == null) return _photoBase64;
 
     setState(() => _isUploadingPhoto = true);
 
     try {
-      final uid = FirestoreService.currentUserId;
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('profile_photos')
-          .child('$uid.jpg');
+      final bytes = await file.readAsBytes();
+      final decoded = img.decodeImage(bytes);
 
-      await ref.putFile(file);
-      final url = await ref.getDownloadURL();
+      if (decoded == null) {
+        throw Exception('Could not read that image.');
+      }
+
+      const maxDimension = 240;
+
+      final resized = (decoded.width > maxDimension ||
+              decoded.height > maxDimension)
+          ? img.copyResize(
+              decoded,
+              width: decoded.width >= decoded.height ? maxDimension : null,
+              height: decoded.height > decoded.width ? maxDimension : null,
+            )
+          : decoded;
+
+      final encoded = base64Encode(img.encodePng(resized, level: 9));
 
       if (mounted) setState(() => _isUploadingPhoto = false);
-      return url;
+      return encoded;
     } catch (e) {
-      debugPrint('Photo upload error: $e');
+      debugPrint('Photo encode error: $e');
       if (mounted) setState(() => _isUploadingPhoto = false);
       rethrow;
     }
@@ -93,14 +108,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _saveProfile() async {
     setState(() => _isSaving = true);
 
-    String? photoUrl;
+    String? photoBase64;
     try {
-      photoUrl = await _uploadPhotoIfNeeded();
+      photoBase64 = await _encodePhotoIfNeeded();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not upload photo: $e'),
+            content: Text('Could not use that photo: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -113,7 +128,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await FirestoreService.updateProfile({
         'name': _nameController.text.trim(),
         'city': _cityController.text.trim(),
-        if (photoUrl != null) 'photo_url': photoUrl,
+        if (photoBase64 != null) 'photo_base64': photoBase64,
       });
     } catch (e) {
       debugPrint('Save profile error: $e');
@@ -227,15 +242,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       image: FileImage(_pickedPhoto!),
                                       fit: BoxFit.cover,
                                     )
-                                  : (_photoUrl != null && _photoUrl!.isNotEmpty)
+                                  : (_photoBase64 != null &&
+                                          _photoBase64!.isNotEmpty)
                                       ? DecorationImage(
-                                          image: NetworkImage(_photoUrl!),
+                                          image: MemoryImage(
+                                            base64Decode(_photoBase64!),
+                                          ),
                                           fit: BoxFit.cover,
                                         )
                                       : null,
                             ),
                             child: (_pickedPhoto == null &&
-                                    (_photoUrl == null || _photoUrl!.isEmpty))
+                                    (_photoBase64 == null ||
+                                        _photoBase64!.isEmpty))
                                 ? Center(
                                     child: Text(
                                       _nameController.text.isNotEmpty
