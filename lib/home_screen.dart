@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
@@ -589,6 +590,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? profile['name'].toString()
                       : _name;
 
+                  final photoBase64 = profile?['photo_base64']?.toString();
+
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -620,7 +623,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const Spacer(),
 
-                      // GOBOT
+                      // PROFILE SHORTCUT
                       GestureDetector(
                         onTap: () => TabSwitcher.of(context)?.switchTab(
                           5,
@@ -637,19 +640,27 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: AppColors.card(
                               dark,
                             ),
+                            image: (photoBase64 != null && photoBase64.isNotEmpty)
+                                ? DecorationImage(
+                                    image: MemoryImage(base64Decode(photoBase64)),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
-                          child: Center(
-                            child: Text(
-                              liveName.isNotEmpty
-                                  ? liveName[0].toUpperCase()
-                                  : 'U',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.cyan,
-                              ),
-                            ),
-                          ),
+                          child: (photoBase64 == null || photoBase64.isEmpty)
+                              ? Center(
+                                  child: Text(
+                                    liveName.isNotEmpty
+                                        ? liveName[0].toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.cyan,
+                                    ),
+                                  ),
+                                )
+                              : null,
                         ),
                       ),
                     ],
@@ -1419,6 +1430,7 @@ class _DailyChallengeEventCard extends StatefulWidget {
 class _DailyChallengeEventCardState extends State<_DailyChallengeEventCard> {
   bool _loading = true;
   bool _available = false;
+  int _playsToday = 0;
 
   @override
   void initState() {
@@ -1427,10 +1439,14 @@ class _DailyChallengeEventCardState extends State<_DailyChallengeEventCard> {
   }
 
   Future<void> _check() async {
-    final available = await DailyBattleService.hasTodaysChallenge(widget.eventId);
+    final results = await Future.wait([
+      DailyBattleService.hasTodaysChallenge(widget.eventId),
+      DailyBattleService.getPlaysToday(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _available = available;
+      _available = results[0] as bool;
+      _playsToday = results[1] as int;
       _loading = false;
     });
   }
@@ -1441,22 +1457,29 @@ class _DailyChallengeEventCardState extends State<_DailyChallengeEventCard> {
       MaterialPageRoute(
         builder: (_) => DailyChallengeQueueScreen(eventId: widget.eventId),
       ),
-    );
+    ).then((_) => _check());
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading || !_available) return const SizedBox.shrink();
 
+    final remaining = DailyBattleService.maxPlaysPerDay - _playsToday;
+    final exhausted = remaining <= 0;
+
     return LiveEventCard(
       eventName: widget.eventName,
       eventType: widget.eventType,
       eventDate: widget.eventDate,
-      description:
-          "The event is live! Wager ${DailyBattleService.wager} tokens and beat another player in today's Daily Challenge.",
+      description: exhausted
+          ? "You've used all ${DailyBattleService.maxPlaysPerDay} Daily "
+              'Challenge attempts for today — come back tomorrow!'
+          : "The event is live! Wager ${DailyBattleService.wager} tokens and "
+              'beat another player — $remaining of '
+              '${DailyBattleService.maxPlaysPerDay} attempts left today.',
       dark: widget.dark,
       participateLabel: 'Join Daily Challenge',
-      onParticipate: _join,
+      onParticipate: exhausted ? null : _join,
     );
   }
 }

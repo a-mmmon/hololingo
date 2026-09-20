@@ -50,12 +50,15 @@ service cloud.firestore {
     }
 
     // A round can only be created holding the EXACT options/correct_index
-    // the admin set for that word that day — never whatever a client
-    // making the battle would prefer — since both players share this
-    // one set of rounds, generated from the admin's daily word list.
-    function dailyRoundMatchesSource(battleId, index) {
+    // the admin set for the word at its claimed source_index that day —
+    // never whatever a client making the battle would prefer — since both
+    // players share this one set of rounds. source_index (not the round's
+    // own sequential index) is what it's checked against, since each
+    // match randomly draws its rounds from that day's whole word pool.
+    function dailyRoundMatchesSource(battleId) {
       let battle = get(/databases/$(database)/documents/daily_battles/$(battleId)).data;
-      let source = get(/databases/$(database)/documents/events/$(battle.event_id)/daily_challenges/$(battle.challenge_date)/words/$(index)).data;
+      let sourceIndex = request.resource.data.source_index;
+      let source = get(/databases/$(database)/documents/events/$(battle.event_id)/daily_challenges/$(battle.challenge_date)/words/$(sourceIndex)).data;
       return request.resource.data.options == source.options
         && request.resource.data.correct_index == source.correct_index;
     }
@@ -167,6 +170,22 @@ service cloud.firestore {
           && (request.auth.uid == userId || isPanelUser());
         allow write: if request.auth != null
           && (request.auth.uid == userId || isModerator());
+      }
+
+      // Tracks how many Daily Challenge attempts this user has used today
+      // (doc id = calendar date), capping it at maxPlaysPerDay by rejecting
+      // any increment once plays already hit 3 — the actual cap number is
+      // duplicated here since rules can't reference the Dart constant.
+      match /daily_challenge_history/{date} {
+        allow read: if request.auth != null
+          && (request.auth.uid == userId || isPanelUser());
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.plays == 1;
+        allow update: if request.auth != null
+          && request.auth.uid == userId
+          && resource.data.plays < 3
+          && request.resource.data.plays == resource.data.plays + 1;
       }
 
       // Daily Challenge champion award, doc id = the event's id. Any
@@ -420,7 +439,9 @@ service cloud.firestore {
 
         allow create: if request.auth != null
           && dailyBattleParticipant(battleId)
-          && dailyRoundMatchesSource(battleId, index)
+          && request.resource.data.source_index is int
+          && request.resource.data.source_index >= 0
+          && dailyRoundMatchesSource(battleId)
           && request.resource.data.player_a_choice == null
           && request.resource.data.player_b_choice == null;
 

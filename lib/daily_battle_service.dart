@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,6 +8,10 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 
 import 'firestore_service.dart';
 
+/// Thrown by [DailyBattleService.findOrJoinQueue] when this user has
+/// already used all of today's [DailyBattleService.maxPlaysPerDay] attempts.
+class DailyChallengeLimitReached implements Exception {}
+
 /// ============================================================================
 /// DAILY CHALLENGE SERVICE
 /// ============================================================================
@@ -14,10 +19,15 @@ import 'firestore_service.dart';
 /// Event-scoped, admin-curated 1v1 battles — the only wager mode this app
 /// has (a separate casual, player-chosen-wager mode was built and then
 /// deliberately dropped in favor of keeping this the one wager game, tied to
-/// live events). Fixed 20-token wager, both players see the SAME 10 admin-set
-/// Thai -> English rounds for that calendar day, matched via a queue.
-/// Score per round rewards both correctness and speed (Kahoot-style); higher
-/// total score wins.
+/// live events). Fixed 20-token wager. Each match randomly draws
+/// [roundCount] Thai -> English rounds from that day's admin-set word pool
+/// (which may hold more than [roundCount] words, so back-to-back matches
+/// the same day don't always repeat the same set), and both players in a
+/// match see the identical drawn rounds. Users get [maxPlaysPerDay]
+/// attempts per calendar day. Score per round rewards correctness and
+/// speed (Kahoot-style); if both players answer a round correctly, only
+/// whoever answered first (by server timestamp) keeps the points for it.
+/// Higher total score wins.
 ///
 /// There is no Cloud Function refereeing this (Spark plan, no billing
 /// account on this project). The winner and token transfer are validated by
@@ -37,6 +47,7 @@ class DailyBattleService {
 
   static const int wager = 20;
   static const int roundCount = 10;
+  static const int maxPlaysPerDay = 3;
 
   static const int defaultTokenFloor = 10;
   static const int defaultFreeTopUp = 75;
@@ -141,6 +152,55 @@ class DailyBattleService {
     }
   }
 
+  /// How many of today's [maxPlaysPerDay] Daily Challenge attempts this
+  /// user has already used, for showing "2 of 3 played today" style UI
+  /// before they commit to joining the queue.
+  static Future<int> getPlaysToday() async {
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('daily_challenge_history')
+          .doc(todayKey())
+          .get();
+      return (doc.data()?['plays'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      debugPrint('getPlaysToday error: $e');
+      return 0;
+    }
+  }
+
+  /// Claims one of today's [maxPlaysPerDay] attempts. Returns false (and
+  /// claims nothing) once the daily limit is already used up — checked
+  /// via a transaction so this can't be raced past the cap, and also
+  /// re-checked by firestore.rules on the write itself.
+  static Future<bool> _claimPlayForToday() async {
+    final ref = _db
+        .collection('users')
+        .doc(_uid)
+        .collection('daily_challenge_history')
+        .doc(todayKey());
+
+    try {
+      return await _db.runTransaction<bool>((transaction) async {
+        final snap = await transaction.get(ref);
+        final current = (snap.data()?['plays'] as num?)?.toInt() ?? 0;
+
+        if (current >= maxPlaysPerDay) return false;
+
+        if (snap.exists) {
+          transaction.update(ref, {'plays': current + 1});
+        } else {
+          transaction.set(ref, {'plays': 1});
+        }
+        return true;
+      });
+    } catch (e) {
+      debugPrint('_claimPlayForToday error: $e');
+      return false;
+    }
+  }
+
   // ============================================================
   // MATCHMAKING
   // ============================================================
@@ -162,10 +222,16 @@ class DailyBattleService {
   /// creates the battle and matches them, returning the battle id. If
   /// nobody's waiting, joins the queue itself and returns null — the
   /// caller should then listen via [watchMyQueueEntry] for a match.
+  ///
+  /// Throws [DailyChallengeLimitReached] if this user has already used
+  /// all of today's [maxPlaysPerDay] attempts.
   static Future<String?> findOrJoinQueue({
     required String eventId,
     required String date,
   }) async {
+    final claimed = await _claimPlayForToday();
+    if (!claimed) throw DailyChallengeLimitReached();
+
     final candidates = await _db
         .collection('daily_challenge_queue')
         .where('event_id', isEqualTo: eventId)
@@ -241,24 +307,33 @@ class DailyBattleService {
       return null;
     }
 
+    // Pull the whole day's word pool (the admin may seed more than
+    // roundCount words, e.g. 20, so repeated matches the same day draw a
+    // different random 10) and pick a random subset — one read instead of
+    // up to 20 individual get()s, and naturally degrades to "shuffled
+    // order" on a day the admin only seeded exactly roundCount words.
+    final wordsSnap = await _db
+        .collection('events')
+        .doc(eventId)
+        .collection('daily_challenges')
+        .doc(date)
+        .collection('words')
+        .get();
+
+    final pool = wordsSnap.docs.toList()..shuffle(Random());
+    final selected = pool.take(roundCount).toList();
+
     // Individual writes, not a batch — each round's create rule makes two
     // get() calls to validate against the admin's real word list, and
     // batching all ten into one commit risks the per-request get() budget.
-    for (var i = 0; i < roundCount; i++) {
+    for (var i = 0; i < selected.length; i++) {
       try {
-        final wordDoc = await _db
-            .collection('events')
-            .doc(eventId)
-            .collection('daily_challenges')
-            .doc(date)
-            .collection('words')
-            .doc('$i')
-            .get();
-
-        final word = wordDoc.data();
-        if (word == null) continue;
+        final doc = selected[i];
+        final word = doc.data();
+        final sourceIndex = int.parse(doc.id);
 
         await battleRef.collection('rounds').doc('$i').set({
+          'source_index': sourceIndex,
           'thai': word['thai'],
           'options': word['options'],
           'correct_index': word['correct_index'],
@@ -352,14 +427,33 @@ class DailyBattleService {
       final aCorrect = r['player_a_choice'] == correctIndex;
       final bCorrect = r['player_b_choice'] == correctIndex;
 
-      scoreA += pointsForRound(
+      var aPoints = pointsForRound(
         correct: aCorrect,
         elapsedMs: (r['player_a_elapsed_ms'] as num).toInt(),
       );
-      scoreB += pointsForRound(
+      var bPoints = pointsForRound(
         correct: bCorrect,
         elapsedMs: (r['player_b_elapsed_ms'] as num).toInt(),
       );
+
+      // Both got it right — first click wins the round outright, using
+      // the server's own answered_at timestamp (not the self-reported
+      // elapsed_ms) so it can't be gamed by under-reporting elapsed time.
+      if (aCorrect && bCorrect) {
+        final aAt = r['player_a_answered_at'] as Timestamp?;
+        final bAt = r['player_b_answered_at'] as Timestamp?;
+
+        if (aAt != null && bAt != null) {
+          if (aAt.compareTo(bAt) < 0) {
+            bPoints = 0;
+          } else if (bAt.compareTo(aAt) < 0) {
+            aPoints = 0;
+          }
+        }
+      }
+
+      scoreA += aPoints;
+      scoreB += bPoints;
     }
 
     final result = scoreA == scoreB ? 'draw' : (scoreA > scoreB ? 'player_a' : 'player_b');

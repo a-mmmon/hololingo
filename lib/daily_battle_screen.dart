@@ -91,6 +91,19 @@ class _DailyBattleScreenState extends State<DailyBattleScreen> {
     final theirScore = (_isPlayerA ? battle['player_b_score'] : battle['player_a_score']) as int? ?? 0;
     final wager = (battle['wager'] as num?)?.toInt() ?? 0;
 
+    final review = _rounds.map((r) {
+      final options = List<String>.from(r['options'] as List);
+      final correctIndex = r['correct_index'] as int;
+      final myChoice = (_isPlayerA ? r['player_a_choice'] : r['player_b_choice']) as int?;
+
+      return {
+        'thai': (r['thai'] ?? '').toString(),
+        'correctAnswer': options[correctIndex],
+        'myAnswer': myChoice != null ? options[myChoice] : null,
+        'isCorrect': myChoice == correctIndex,
+      };
+    }).toList();
+
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
 
@@ -102,6 +115,7 @@ class _DailyBattleScreenState extends State<DailyBattleScreen> {
           myScore: myScore,
           theirScore: theirScore,
           wager: wager,
+          review: review,
         ),
       ),
     );

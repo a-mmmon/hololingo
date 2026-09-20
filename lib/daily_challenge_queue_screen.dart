@@ -74,7 +74,10 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
       if (!mounted) return;
       setState(() {
         _joining = false;
-        _error = 'Could not join the challenge.';
+        _error = e is DailyChallengeLimitReached
+            ? "You've used all ${DailyBattleService.maxPlaysPerDay} Daily "
+                'Challenge attempts for today — come back tomorrow!'
+            : 'Could not join the challenge.';
       });
     }
   }
@@ -107,61 +110,66 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_error == null) ...[
-                SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: CircularProgressIndicator(
-                    color: AppColors.cyan,
-                    backgroundColor: AppColors.cyan.withValues(alpha: 0.15),
-                    strokeWidth: 5,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_error == null) ...[
+                  SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: CircularProgressIndicator(
+                      color: AppColors.cyan,
+                      backgroundColor: AppColors.cyan.withValues(alpha: 0.15),
+                      strokeWidth: 5,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  _joining ? 'Joining today\'s challenge…' : 'Looking for an opponent…',
-                  style: TextStyle(
-                    color: AppColors.textPrimary(dark),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(height: 20),
+                  Text(
+                    _joining
+                        ? 'Joining today\'s challenge…'
+                        : 'Looking for an opponent…',
+                    style: TextStyle(
+                      color: AppColors.textPrimary(dark),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Wager: ${DailyBattleService.wager} tokens',
-                  style: TextStyle(
-                    color: AppColors.textSecondary(dark),
-                    fontSize: 13,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Wager: ${DailyBattleService.wager} tokens',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(dark),
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 28),
-                TextButton(
-                  onPressed: _cancel,
-                  child: const Text('Cancel'),
-                ),
-              ] else ...[
-                Icon(Icons.hourglass_empty_rounded,
-                    color: AppColors.textSecondary(dark), size: 48),
-                const SizedBox(height: 16),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 14),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.cyan,
-                    foregroundColor: Colors.black,
+                  const SizedBox(height: 28),
+                  TextButton(
+                    onPressed: _cancel,
+                    child: const Text('Cancel'),
                   ),
-                  child: const Text('Done'),
-                ),
+                ] else ...[
+                  Icon(Icons.hourglass_empty_rounded,
+                      color: AppColors.textSecondary(dark), size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: AppColors.textSecondary(dark), fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.cyan,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Done'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
