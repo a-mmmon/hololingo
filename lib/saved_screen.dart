@@ -473,7 +473,19 @@ class _SavedWordCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onDelete,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.textSecondary(dark),
+                  size: 20,
+                ),
+              ),
+            ),
             Icon(
               Icons.chevron_right_rounded,
               color: AppColors.textSecondary(dark),

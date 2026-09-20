@@ -14,13 +14,13 @@ import 'firestore_service.dart';
 /// Event-scoped, admin-curated 1v1 battles — the only wager mode this app
 /// has (a separate casual, player-chosen-wager mode was built and then
 /// deliberately dropped in favor of keeping this the one wager game, tied to
-/// live events). Fixed 20-coin wager, both players see the SAME 10 admin-set
+/// live events). Fixed 20-token wager, both players see the SAME 10 admin-set
 /// Thai -> English rounds for that calendar day, matched via a queue.
 /// Score per round rewards both correctness and speed (Kahoot-style); higher
 /// total score wins.
 ///
 /// There is no Cloud Function refereeing this (Spark plan, no billing
-/// account on this project). The winner and coin transfer are validated by
+/// account on this project). The winner and token transfer are validated by
 /// firestore.rules instead of a trusted server. Two things are explicitly
 /// NOT rules-verifiable and are disclosed, client-trusted simplifications:
 ///   - a player's own reported elapsed_ms per round (a modified client could
@@ -38,7 +38,7 @@ class DailyBattleService {
   static const int wager = 20;
   static const int roundCount = 10;
 
-  static const int defaultCoinFloor = 10;
+  static const int defaultTokenFloor = 10;
   static const int defaultFreeTopUp = 75;
 
   // ============================================================
@@ -55,12 +55,12 @@ class DailyBattleService {
       final data = doc.data() ?? {};
 
       return {
-        'coin_floor': (data['coin_floor'] as num?)?.toInt() ?? defaultCoinFloor,
+        'token_floor': (data['token_floor'] as num?)?.toInt() ?? defaultTokenFloor,
         'free_top_up': (data['free_top_up'] as num?)?.toInt() ?? defaultFreeTopUp,
       };
     } catch (e) {
       return {
-        'coin_floor': defaultCoinFloor,
+        'token_floor': defaultTokenFloor,
         'free_top_up': defaultFreeTopUp,
       };
     }
@@ -219,7 +219,7 @@ class DailyBattleService {
           'player_a_uid': otherUid,
           'player_b_uid': _uid,
           'wager': wager,
-          'coin_floor': settings['coin_floor'],
+          'token_floor': settings['token_floor'],
           'round_count': roundCount,
           'player_a_score': null,
           'player_b_score': null,
@@ -376,10 +376,10 @@ class DailyBattleService {
       debugPrint('resolveIfReady resolve step: $e');
     }
 
-    await _settleCoins(battleId);
+    await _settleTokens(battleId);
   }
 
-  static Future<void> _settleCoins(String battleId) async {
+  static Future<void> _settleTokens(String battleId) async {
     try {
       await _db.runTransaction((transaction) async {
         final battleRef = _db.collection('daily_battles').doc(battleId);
@@ -395,7 +395,7 @@ class DailyBattleService {
         final playerAUid = battle['player_a_uid'] as String;
         final playerBUid = battle['player_b_uid'] as String;
         final wagerAmount = (battle['wager'] as num).toInt();
-        final coinFloor = (battle['coin_floor'] as num).toInt();
+        final tokenFloor = (battle['token_floor'] as num).toInt();
         final result = battle['result'] as String;
 
         final userARef = _db.collection('users').doc(playerAUid);
@@ -412,10 +412,10 @@ class DailyBattleService {
 
         if (result == 'player_a') {
           newA = aTokens + wagerAmount;
-          newB = (bTokens - wagerAmount) < coinFloor ? coinFloor : bTokens - wagerAmount;
+          newB = (bTokens - wagerAmount) < tokenFloor ? tokenFloor : bTokens - wagerAmount;
         } else if (result == 'player_b') {
           newB = bTokens + wagerAmount;
-          newA = (aTokens - wagerAmount) < coinFloor ? coinFloor : aTokens - wagerAmount;
+          newA = (aTokens - wagerAmount) < tokenFloor ? tokenFloor : aTokens - wagerAmount;
         }
 
         transaction.update(userARef, {
@@ -429,7 +429,7 @@ class DailyBattleService {
         transaction.update(battleRef, {'settled': true});
       });
     } catch (e) {
-      debugPrint('_settleCoins error: $e');
+      debugPrint('_settleTokens error: $e');
     }
   }
 
@@ -528,16 +528,16 @@ class DailyBattleService {
   }
 
   // ============================================================
-  // COIN REFILL PURCHASE (consumable IAP)
+  // TOKEN REFILL PURCHASE (consumable IAP)
   //
   // Same client-trusted pattern as the Premium subscription — Apple
   // charges the user and pays out on its own, independent of this;
   // there's no server here to double-check the receipt before
-  // crediting coins, which is an accepted trade-off, not a new one.
+  // crediting tokens, which is an accepted trade-off, not a new one.
   // ============================================================
 
-  static const String coinRefillProductId = 'com.hololingo.coins.refill';
-  static const int coinRefillAmount = 100;
+  static const String tokenRefillProductId = 'com.hololingo.tokens.refill';
+  static const int tokenRefillAmount = 100;
 
   static final InAppPurchase _iap = InAppPurchase.instance;
   static StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -564,7 +564,7 @@ class DailyBattleService {
   }
 
   static Future<ProductDetailsResponse> queryRefillProduct() {
-    return _iap.queryProductDetails({coinRefillProductId});
+    return _iap.queryProductDetails({tokenRefillProductId});
   }
 
   static Future<void> buyRefill(ProductDetails product) {
@@ -576,7 +576,7 @@ class DailyBattleService {
     List<PurchaseDetails> purchases,
   ) async {
     for (final purchase in purchases) {
-      if (purchase.productID != coinRefillProductId) continue;
+      if (purchase.productID != tokenRefillProductId) continue;
 
       switch (purchase.status) {
         case PurchaseStatus.error:
@@ -588,11 +588,11 @@ class DailyBattleService {
         case PurchaseStatus.restored:
           try {
             await _db.collection('users').doc(_uid).set(
-              {'tokens': FieldValue.increment(coinRefillAmount)},
+              {'tokens': FieldValue.increment(tokenRefillAmount)},
               SetOptions(merge: true),
             );
           } catch (e) {
-            debugPrint('DailyBattleService: could not credit coins: $e');
+            debugPrint('DailyBattleService: could not credit tokens: $e');
           }
           break;
 

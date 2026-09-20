@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'app_theme.dart';
 import 'firestore_service.dart';
@@ -21,6 +26,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String _name = '';
   String _city = '';
+  String? _photoBase64;
 
   int _tokens = 0;
   int _wordsSaved = 0;
@@ -48,14 +54,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadProfile();
   }
 
-  Future<void> _buyCoins() async {
+  Future<void> _buyTokens() async {
     final confirmed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => FakeCheckoutScreen(
-          title: '${DailyBattleService.coinRefillAmount} Coins',
+          title: '${DailyBattleService.tokenRefillAmount} Tokens',
           priceLabel: '฿20',
           onConfirm: () => FirestoreService.addRewards(
-            tokens: DailyBattleService.coinRefillAmount,
+            tokens: DailyBattleService.tokenRefillAmount,
             xp: 0,
           ),
         ),
@@ -66,7 +72,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _loadProfile();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('+${DailyBattleService.coinRefillAmount} coins!')),
+        SnackBar(content: Text('+${DailyBattleService.tokenRefillAmount} tokens!')),
+      );
+    }
+  }
+
+  Future<void> _exportVocabulary() async {
+    try {
+      final words = await FirestoreService.getSavedWords();
+
+      if (words.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No saved words to export yet.')),
+        );
+        return;
+      }
+
+      String csvField(dynamic value) {
+        final text = (value ?? '').toString();
+        if (text.contains(',') || text.contains('"') || text.contains('\n')) {
+          return '"${text.replaceAll('"', '""')}"';
+        }
+        return text;
+      }
+
+      final buffer = StringBuffer('Word,Phonetic,Definition,Example,Note\n');
+      for (final word in words) {
+        buffer.writeln([
+          csvField(word['word']),
+          csvField(word['phonetic']),
+          csvField(word['definition']),
+          csvField(word['example']),
+          csvField(word['note']),
+        ].join(','));
+      }
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/hololingo_vocabulary.csv');
+      await file.writeAsString(buffer.toString());
+
+      if (!mounted) return;
+
+      // iOS's share sheet needs a source rect to anchor its popover to —
+      // without it, the native call throws instead of showing anything.
+      final box = context.findRenderObject() as RenderBox?;
+      final sharePositionOrigin = box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : null;
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: 'HoloLingo vocabulary export',
+          sharePositionOrigin: sharePositionOrigin,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Export vocabulary error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not export vocabulary: $e')),
       );
     }
   }
@@ -86,6 +152,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _name = data['name'] ?? 'User';
         _city = data['city'] ?? '';
+        _photoBase64 = data['photo_base64']?.toString();
 
         _tokens = data['tokens'] ?? 0;
 
@@ -790,17 +857,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: AppColors.cyan,
                               width: 2.5,
                             ),
+                            image: (_photoBase64 != null &&
+                                    _photoBase64!.isNotEmpty)
+                                ? DecorationImage(
+                                    image: MemoryImage(
+                                      base64Decode(_photoBase64!),
+                                    ),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
-                          child: Center(
-                            child: Text(
-                              _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
-                              style: const TextStyle(
-                                fontSize: 38,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.cyan,
-                              ),
-                            ),
-                          ),
+                          child: (_photoBase64 == null || _photoBase64!.isEmpty)
+                              ? Center(
+                                  child: Text(
+                                    _name.isNotEmpty
+                                        ? _name[0].toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      fontSize: 38,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.cyan,
+                                    ),
+                                  ),
+                                )
+                              : null,
                         ),
                         Positioned(
                           bottom: -4,
@@ -893,9 +973,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               Center(
                 child: TextButton.icon(
-                  onPressed: _buyCoins,
+                  onPressed: _buyTokens,
                   icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                  label: const Text('Get more coins'),
+                  label: const Text('Get more tokens'),
                 ),
               ),
 
@@ -1183,6 +1263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 title: 'Export vocabulary',
                 subtitle: 'Download as CSV',
                 dark: dark,
+                onTap: _exportVocabulary,
               ),
 
               _SettingsRow(

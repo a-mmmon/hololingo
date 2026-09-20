@@ -775,6 +775,13 @@ class FirestoreService {
     }
   }
 
+  static Future<void> removeFriend(String friendUid) async {
+    await _db
+        .collection('friendships')
+        .doc(_friendshipId(_uid, friendUid))
+        .delete();
+  }
+
   // ============================================================
   // BONDS & GIFTS
   // ============================================================
@@ -1221,116 +1228,6 @@ class FirestoreService {
   // scan a target number of words during the event's window, then
   // claim a one-time reward. No groups, no invites.
   // ============================================================
-
-  /// Reads an `events/{eventId}` doc (theme, dates, target_count,
-  /// reward_xp, reward_tokens) — the richer definition the admin
-  /// dashboard's event form writes, separate from the lightweight
-  /// config/current_event pointer used for the upcoming/live banner.
-  static Future<Map<String, dynamic>?> getEventDefinition(
-    String eventId,
-  ) async {
-    try {
-      final doc = await _db.collection('events').doc(eventId).get();
-
-      if (!doc.exists) {
-        return null;
-      }
-
-      return {
-        'id': doc.id,
-        ...doc.data()!,
-      };
-    } catch (e) {
-      debugPrint('getEventDefinition error: $e');
-      return null;
-    }
-  }
-
-  /// Counts this user's scans within [startAt, endAt] for the challenge
-  /// progress bar, using a server-side aggregate count instead of
-  /// downloading every matching scan_history doc.
-  static Future<int> getEventScanCount({
-    required DateTime startAt,
-    required DateTime endAt,
-  }) async {
-    try {
-      final query = _db
-          .collection('scan_history')
-          .where('user_id', isEqualTo: _uid)
-          .where(
-            'created_at',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startAt),
-          )
-          .where(
-            'created_at',
-            isLessThanOrEqualTo: Timestamp.fromDate(endAt),
-          );
-
-      final result = await query.count().get();
-      return result.count ?? 0;
-    } catch (e) {
-      debugPrint('getEventScanCount error: $e');
-      return 0;
-    }
-  }
-
-  static Future<bool> hasClaimedEvent(String eventId) async {
-    try {
-      final doc = await _db
-          .collection('users')
-          .doc(_uid)
-          .collection('claimed_events')
-          .doc(eventId)
-          .get();
-
-      return doc.exists;
-    } catch (e) {
-      debugPrint('hasClaimedEvent error: $e');
-      return false;
-    }
-  }
-
-  /// Grants the challenge reward exactly once per user per event.
-  /// Returns true if this call is the one that actually granted it,
-  /// false if it was already claimed earlier.
-  static Future<bool> claimEventReward({
-    required String eventId,
-    required int xp,
-    required int tokens,
-  }) async {
-    final claimRef = _db
-        .collection('users')
-        .doc(_uid)
-        .collection('claimed_events')
-        .doc(eventId);
-
-    final userRef = _db.collection('users').doc(_uid);
-
-    return _db.runTransaction<bool>((transaction) async {
-      final claimSnap = await transaction.get(claimRef);
-
-      if (claimSnap.exists) {
-        return false;
-      }
-
-      transaction.set(claimRef, {
-        'claimed_at': FieldValue.serverTimestamp(),
-        'xp': xp,
-        'tokens': tokens,
-      });
-
-      transaction.set(
-        userRef,
-        {
-          'total_xp': FieldValue.increment(xp),
-          'tokens': FieldValue.increment(tokens),
-        },
-        SetOptions(merge: true),
-      );
-
-      return true;
-    });
-  }
 
   // ============================================================
   // GOBOT USAGE LIMIT

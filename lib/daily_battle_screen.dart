@@ -211,17 +211,25 @@ class _DailyBattleScreenState extends State<DailyBattleScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Text(
-            'What is this in English?',
-            style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            (round['thai'] ?? '').toString(),
-            style: TextStyle(
-              color: AppColors.textPrimary(dark),
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  'What is this in English?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textSecondary(dark), fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  (round['thai'] ?? '').toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textPrimary(dark),
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),

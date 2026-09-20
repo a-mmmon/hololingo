@@ -4,10 +4,6 @@ import 'app_theme.dart';
 import 'fake_checkout_screen.dart';
 import 'firestore_service.dart';
 
-/// Bonus tokens granted on top of Premium status when subscribing — a perk,
-/// separate from what the subscription itself unlocks (topics/limits).
-const int kSubscriptionBonusTokens = 100;
-
 class _PlanOption {
   final String id;
   final String label;
@@ -31,13 +27,13 @@ const List<_PlanOption> _plans = [
   _PlanOption(
     id: 'com.hololingo.premium.monthly',
     label: 'Monthly',
-    priceLabel: '\$4.99 / month',
+    priceLabel: '฿99 / month',
     duration: Duration(days: 30),
   ),
   _PlanOption(
     id: 'com.hololingo.premium.yearly',
     label: 'Yearly',
-    priceLabel: '\$39.99 / year',
+    priceLabel: '฿999 / year',
     duration: Duration(days: 365),
     bestValue: true,
   ),
@@ -94,10 +90,6 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
               transactionId: 'demo-${DateTime.now().millisecondsSinceEpoch}',
               verificationData: 'demo-checkout',
             );
-            await FirestoreService.addRewards(
-              tokens: kSubscriptionBonusTokens,
-              xp: 0,
-            );
           },
         ),
       ),
@@ -109,7 +101,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
     if (confirmed == true) {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Welcome to Premium! +$kSubscriptionBonusTokens coins.')),
+        const SnackBar(content: Text('Welcome to Premium!')),
       );
     }
   }
@@ -146,7 +138,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Unlock every topic and get $kSubscriptionBonusTokens bonus coins.',
+              'Unlock every topic and remove ads.',
               style: TextStyle(
                 color: AppColors.textSecondary(dark),
                 fontSize: 14,
@@ -154,7 +146,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
               ),
             ),
             const SizedBox(height: 18),
-            ...['Unlocked topics', 'Remove ads', '$kSubscriptionBonusTokens bonus coins'].map(
+            ...['Unlocked topics', 'Remove ads'].map(
               (text) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(

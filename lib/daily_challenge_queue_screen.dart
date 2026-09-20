@@ -111,7 +111,15 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (_error == null) ...[
-                const CircularProgressIndicator(color: AppColors.cyan),
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CircularProgressIndicator(
+                    color: AppColors.cyan,
+                    backgroundColor: AppColors.cyan.withValues(alpha: 0.15),
+                    strokeWidth: 5,
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Text(
                   _joining ? 'Joining today\'s challenge…' : 'Looking for an opponent…',
@@ -123,7 +131,7 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Wager: ${DailyBattleService.wager} coins',
+                  'Wager: ${DailyBattleService.wager} tokens',
                   style: TextStyle(
                     color: AppColors.textSecondary(dark),
                     fontSize: 13,

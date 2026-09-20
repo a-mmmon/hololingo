@@ -117,6 +117,48 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
     ));
   }
 
+  Future<void> _unsave() async {
+    if (_saving) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          'Remove word?',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Remove "${widget.word}" from your saved vocabulary?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _saving = true);
+    await FirestoreService.deleteWord(widget.word);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _saved = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('"${widget.word}" removed from saved words.'),
+    ));
+  }
+
   Widget _buildWordImage() {
     final imageBase64 = widget.imageBase64?.trim() ?? '';
     final imageUrl = widget.imageUrl?.trim() ?? '';
@@ -345,7 +387,7 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: (_saving || _saved) ? null : _save,
+                            onPressed: _saving ? null : (_saved ? _unsave : _save),
                             icon: _saving
                                 ? const SizedBox(
                                     width: 16,

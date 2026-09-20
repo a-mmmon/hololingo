@@ -74,7 +74,7 @@ class DailyBattleResultScreen extends StatelessWidget {
               const SizedBox(height: 16),
               if (!isDraw)
                 Text(
-                  won ? '+$wager coins' : '-$wager coins',
+                  won ? '+$wager tokens' : '-$wager tokens',
                   style: TextStyle(
                     color: color,
                     fontSize: 20,

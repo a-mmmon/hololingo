@@ -37,6 +37,7 @@ class _FriendProfileScreenState
   bool _loadingFriendsCount = true;
   bool _loadingEvents = true;
   bool _sendingGift = false;
+  bool _unfriending = false;
 
   List<String> _eventsParticipated = [];
 
@@ -351,6 +352,67 @@ class _FriendProfileScreenState
           _sendingGift = false;
         });
       }
+    }
+  }
+
+  // ============================================================
+  // UNFRIEND
+  // ============================================================
+
+  Future<void> _confirmUnfriend() async {
+    final dark = ThemeProvider.isDark(context);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card(dark),
+        title: Text(
+          'Unfriend ${widget.name}?',
+          style: TextStyle(
+            color: AppColors.textPrimary(dark),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'You will no longer be friends with ${widget.name}.',
+          style: TextStyle(color: AppColors.textSecondary(dark)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unfriend', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    await _unfriend();
+  }
+
+  Future<void> _unfriend() async {
+    if (_unfriending) return;
+
+    setState(() => _unfriending = true);
+
+    try {
+      await FirestoreService.removeFriend(widget.friendUid);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      debugPrint('FriendProfile: unfriend error: $e');
+      if (!mounted) return;
+      setState(() => _unfriending = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to unfriend. Try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -706,6 +768,40 @@ class _FriendProfileScreenState
                               .circular(
                         12,
                       ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(
+                height: 12,
+              ),
+
+              // ==================================================
+              // UNFRIEND
+              // ==================================================
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _unfriending ? null : _confirmUnfriend,
+                  icon: _unfriending
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.textSecondary(dark),
+                          ),
+                        )
+                      : const Icon(Icons.person_remove_alt_1_rounded, size: 18),
+                  label: Text(_unfriending ? 'Removing…' : 'Unfriend'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),

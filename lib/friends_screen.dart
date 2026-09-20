@@ -37,12 +37,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
       // Profile's friend-add icon opens, and its notification dot is
       // driven by incoming requests, so tapping it has to actually show
       // them, not just a search box with no visible reason for the dot.
+      // Also needs the friends list so search results for someone already
+      // a friend show "Friends" instead of a re-addable "Add" button.
       final outgoing = await FirestoreService.getOutgoingRequests();
       final incoming = await FirestoreService.getIncomingRequests();
+      final friends = await FirestoreService.getFriends();
       if (!mounted) return;
       setState(() {
         _outgoingUids = outgoing.map((r) => r['to'] as String).toSet();
         _incoming = incoming;
+        _friends = friends;
         _loading = false;
       });
       return;
@@ -119,8 +123,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
     }
   }
 
-  void _openFriendProfile(Map<String, dynamic> friend) {
-    Navigator.push(context, MaterialPageRoute(
+  Future<void> _openFriendProfile(Map<String, dynamic> friend) async {
+    final result = await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => FriendProfileScreen(
         friendUid: friend['uid'] ?? '',
         name: friend['name'] ?? 'User',
@@ -128,6 +132,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
         isBff: false,
       ),
     ));
+
+    if (result == true) {
+      _loadAll();
+    }
   }
 
   @override
@@ -250,23 +258,33 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       const SizedBox(height: 20),
                       _SectionLabel('SEARCH RESULTS', dark),
                       const SizedBox(height: 10),
-                      ..._searchResults.map((u) => _UserTile(
-                            name: u['name'] ?? 'User',
-                            subtitle: u['city'],
-                            dark: dark,
-                            trailing: _outgoingUids.contains(u['uid'])
-                                ? _StatusPill(
-                                    label: 'Requested',
-                                    dark: dark,
-                                    muted: true)
-                                : GestureDetector(
-                                    onTap: () => _sendRequest(u),
-                                    child: _StatusPill(
-                                        label: 'Add',
-                                        dark: dark,
-                                        muted: false),
-                                  ),
-                          )),
+                      ..._searchResults.map((u) {
+                        final isFriend = _friends
+                            .any((f) => f['uid'] == u['uid']);
+                        final isRequested = _outgoingUids.contains(u['uid']);
+                        return _UserTile(
+                          name: u['name'] ?? 'User',
+                          subtitle: u['city'],
+                          dark: dark,
+                          trailing: isFriend
+                              ? _StatusPill(
+                                  label: 'Friends',
+                                  dark: dark,
+                                  muted: true)
+                              : isRequested
+                                  ? _StatusPill(
+                                      label: 'Requested',
+                                      dark: dark,
+                                      muted: true)
+                                  : GestureDetector(
+                                      onTap: () => _sendRequest(u),
+                                      child: _StatusPill(
+                                          label: 'Add',
+                                          dark: dark,
+                                          muted: false),
+                                    ),
+                        );
+                      }),
                     ] else if (_searchController.text.trim().isNotEmpty &&
                         !_searching) ...[
                       const SizedBox(height: 40),

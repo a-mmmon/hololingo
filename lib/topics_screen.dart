@@ -9,7 +9,7 @@ import 'premium_paywall.dart';
 import 'premium_status.dart';
 import 'topics_data.dart';
 import 'topic_word_grid_screen.dart';
-import 'scan_challenge_screen.dart';
+import 'live_event_card.dart';
 
 class TopicsScreen extends StatefulWidget {
   const TopicsScreen({super.key});
@@ -322,25 +322,6 @@ class _TopicsScreenState extends State<TopicsScreen> {
   // EVENT PARTICIPATION
   // ============================================================
 
-  Future<void> _participateInEvent() async {
-    if (!_eventIsLive || _currentEvent == null) {
-      return;
-    }
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ScanChallengeScreen(
-          eventId: _eventId,
-        ),
-      ),
-    );
-
-    if (mounted) {
-      await _loadAll();
-    }
-  }
-
   // ============================================================
   // EVENT NOTIFICATION
   // ============================================================
@@ -622,12 +603,13 @@ class _TopicsScreenState extends State<TopicsScreen> {
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
                       ),
-                      child: _LiveEventCard(
+                      child: LiveEventCard(
                         eventName: _eventName,
                         eventType: _eventType,
                         eventDate: _eventDateText,
+                        description:
+                            "The event is live! Join today's Daily Challenge from the Home screen.",
                         dark: dark,
-                        onParticipate: _participateInEvent,
                       ),
                     ),
 
@@ -901,199 +883,6 @@ class _UpcomingEventCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(
                       12,
                     ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ================================================================
-// LIVE EVENT CARD
-// ================================================================
-
-class _LiveEventCard extends StatelessWidget {
-  final String eventName;
-  final String eventType;
-  final String eventDate;
-  final bool dark;
-  final VoidCallback onParticipate;
-
-  const _LiveEventCard({
-    required this.eventName,
-    required this.eventType,
-    required this.eventDate,
-    required this.dark,
-    required this.onParticipate,
-  });
-
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(
-          0xFF122235,
-        ),
-        borderRadius: BorderRadius.circular(
-          18,
-        ),
-        border: Border.all(
-          color: AppColors.cyan.withOpacity(
-            0.35,
-          ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(
-          16,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: AppColors.cyan.withOpacity(
-                      0.14,
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.travel_explore_rounded,
-                    color: AppColors.cyan,
-                    size: 25,
-                  ),
-                ),
-                const SizedBox(
-                  width: 12,
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        eventName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(
-                        height: 3,
-                      ),
-                      Text(
-                        eventType,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(
-                      0.15,
-                    ),
-                    borderRadius: BorderRadius.circular(
-                      20,
-                    ),
-                    border: Border.all(
-                      color: Colors.green.withOpacity(
-                        0.45,
-                      ),
-                    ),
-                  ),
-                  child: const Text(
-                    'LIVE',
-                    style: TextStyle(
-                      color: Colors.greenAccent,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 14,
-            ),
-            Row(
-              children: [
-                const Icon(
-                  Icons.schedule_rounded,
-                  color: AppColors.cyan,
-                  size: 17,
-                ),
-                const SizedBox(
-                  width: 7,
-                ),
-                Expanded(
-                  child: Text(
-                    eventDate,
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 10,
-            ),
-            const Text(
-              'The event is live! Scan words to complete the challenge.',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(
-              height: 14,
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onParticipate,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(
-                    0xFF7C4DFF,
-                  ),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 13,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      12,
-                    ),
-                  ),
-                ),
-                child: const Text(
-                  'View Challenge',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),

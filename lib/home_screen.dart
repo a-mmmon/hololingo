@@ -7,6 +7,7 @@ import 'saved_screen.dart';
 import 'main.dart';
 import 'daily_battle_service.dart';
 import 'daily_challenge_queue_screen.dart';
+import 'live_event_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -269,6 +270,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────
   // IS LIVE?
   // ─────────────────────────────────────────
+
+  String get _eventType {
+    final type = _event?['type']?.toString().trim();
+    return (type == null || type.isEmpty) ? 'special_event' : type;
+  }
 
   String? get _currentEventId {
     final event = _event;
@@ -1076,7 +1082,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
               if (_isEventLive() && _currentEventId != null) ...[
                 const SizedBox(height: 12),
-                _DailyChallengeBanner(eventId: _currentEventId!, dark: dark),
+                _DailyChallengeEventCard(
+                  eventId: _currentEventId!,
+                  eventName: eventName ?? 'Special Event',
+                  eventType: _eventType,
+                  eventDate: eventStart != null
+                      ? (_getEventEnd() != null
+                          ? '${_formatEventDate(eventStart)} – ${_formatEventDate(_getEventEnd())}'
+                          : _formatEventDate(eventStart))
+                      : 'Special Event',
+                  dark: dark,
+                ),
               ],
 
               StreamBuilder<Map<String, dynamic>?>(
@@ -1381,17 +1397,26 @@ class _RecentWordTile extends StatelessWidget {
 // up today's 10 words before offering the button, so tapping it never
 // leads to an empty challenge.
 
-class _DailyChallengeBanner extends StatefulWidget {
+class _DailyChallengeEventCard extends StatefulWidget {
   final String eventId;
+  final String eventName;
+  final String eventType;
+  final String eventDate;
   final bool dark;
 
-  const _DailyChallengeBanner({required this.eventId, required this.dark});
+  const _DailyChallengeEventCard({
+    required this.eventId,
+    required this.eventName,
+    required this.eventType,
+    required this.eventDate,
+    required this.dark,
+  });
 
   @override
-  State<_DailyChallengeBanner> createState() => _DailyChallengeBannerState();
+  State<_DailyChallengeEventCard> createState() => _DailyChallengeEventCardState();
 }
 
-class _DailyChallengeBannerState extends State<_DailyChallengeBanner> {
+class _DailyChallengeEventCardState extends State<_DailyChallengeEventCard> {
   bool _loading = true;
   bool _available = false;
 
@@ -1410,55 +1435,28 @@ class _DailyChallengeBannerState extends State<_DailyChallengeBanner> {
     });
   }
 
+  void _join() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DailyChallengeQueueScreen(eventId: widget.eventId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading || !_available) return const SizedBox.shrink();
 
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DailyChallengeQueueScreen(eventId: widget.eventId),
-        ),
-      ),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF7C4DFF).withOpacity(0.12),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF7C4DFF).withOpacity(0.4)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.flash_on_rounded, color: Color(0xFF7C4DFF), size: 30),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Daily Challenge',
-                    style: TextStyle(
-                      color: AppColors.textPrimary(widget.dark),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    'Wager ${DailyBattleService.wager} coins — beat another player today',
-                    style: TextStyle(
-                      color: AppColors.textSecondary(widget.dark),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF7C4DFF)),
-          ],
-        ),
-      ),
+    return LiveEventCard(
+      eventName: widget.eventName,
+      eventType: widget.eventType,
+      eventDate: widget.eventDate,
+      description:
+          "The event is live! Wager ${DailyBattleService.wager} tokens and beat another player in today's Daily Challenge.",
+      dark: widget.dark,
+      participateLabel: 'Join Daily Challenge',
+      onParticipate: _join,
     );
   }
 }

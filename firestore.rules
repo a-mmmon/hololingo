@@ -38,10 +38,10 @@ service cloud.firestore {
     // ============================================================
     // DAILY CHALLENGE HELPERS
     //
-    // Event-scoped, admin-curated, matchmade 10-round battles — a
-    // separate mode from Coin Battle above (fixed wager, shared
-    // admin-set word list instead of each player's own saved words).
-    // Same no-Cloud-Function trade-off applies throughout.
+    // Event-scoped, admin-curated, matchmade 10-round battles wagering
+    // tokens — the app's only wager mode. No Cloud Function refereeing
+    // this (Spark plan, no billing account), so the winner and the token
+    // transfer are both validated here instead of by a trusted backend.
     // ============================================================
 
     function dailyBattleParticipant(battleId) {
@@ -52,7 +52,7 @@ service cloud.firestore {
     // A round can only be created holding the EXACT options/correct_index
     // the admin set for that word that day — never whatever a client
     // making the battle would prefer — since both players share this
-    // one set of rounds (unlike Coin Battle's own-words questions).
+    // one set of rounds, generated from the admin's daily word list.
     function dailyRoundMatchesSource(battleId, index) {
       let battle = get(/databases/$(database)/documents/daily_battles/$(battleId)).data;
       let source = get(/databases/$(database)/documents/events/$(battle.event_id)/daily_challenges/$(battle.challenge_date)/words/$(index)).data;
@@ -81,7 +81,7 @@ service cloud.firestore {
       let expectedTokens =
         battle.result == 'draw' ? oldTokens :
         isWinner ? oldTokens + battle.wager :
-        isLoser ? (oldTokens - battle.wager > battle.coin_floor ? oldTokens - battle.wager : battle.coin_floor) :
+        isLoser ? (oldTokens - battle.wager > battle.token_floor ? oldTokens - battle.wager : battle.token_floor) :
         oldTokens;
       return battle.status == 'resolved'
         && requesterIsParticipant
@@ -369,7 +369,7 @@ service cloud.firestore {
     }
 
     match /daily_battles/{battleId} {
-      // Broader than Coin Battle's own private battles on purpose:
+      // Broader than a typical private-match read on purpose:
       // Daily Challenge is a public competitive event whose results
       // feed the end-of-event champion tally, which a regular user's
       // client has to compute itself (no Cloud Function) by reading
@@ -388,7 +388,7 @@ service cloud.firestore {
         && request.resource.data.player_a_score == null
         && request.resource.data.player_b_score == null
         && request.resource.data.wager is int && request.resource.data.wager > 0
-        && request.resource.data.coin_floor is int && request.resource.data.coin_floor >= 0
+        && request.resource.data.token_floor is int && request.resource.data.token_floor >= 0
         && request.resource.data.round_count is int && request.resource.data.round_count > 0;
 
       // Resolution: totals two already-locked-in per-round scores into
@@ -404,8 +404,7 @@ service cloud.firestore {
         && request.resource.data.result == dailyBattleExpectedResult(request.resource.data.player_a_score, request.resource.data.player_b_score)
         && request.resource.data.resolved_at == request.time;
 
-      // Settling coins: settled false -> true exactly once, same
-      // pattern as Coin Battle.
+      // Settling tokens: settled false -> true exactly once.
       allow update: if request.auth != null
         && (request.auth.uid == resource.data.player_a_uid || request.auth.uid == resource.data.player_b_uid)
         && resource.data.status == 'resolved'
