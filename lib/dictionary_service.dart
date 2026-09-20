@@ -803,5 +803,388 @@ class DictionaryService {
           'A utensil with a shallow bowl used for eating or serving food.',
       'example': 'Use a spoon to stir the soup.',
     },
+
+    // ------------------------------------------------------------
+    // Added to cover every current detector class (see detector_service.dart
+    // _labels) — previously these fell through to the bundled Wiktionary
+    // asset dictionary, which has no phonetic data at all and sometimes
+    // surfaces an obscure/wrong sense for a common object (e.g. "projector"
+    // as "one who plans" instead of the device). Curated here the same way
+    // as the rest of this map, so the app never needs the network for its
+    // own known vocabulary.
+    // ------------------------------------------------------------
+
+    'ambulance': {
+      'phonetic': '/ˈæm.bjə.ləns/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A vehicle equipped to carry sick or injured people to a hospital, usually in an emergency.',
+      'example': 'The ambulance rushed to the hospital with its siren on.',
+    },
+    'backpack': {
+      'phonetic': '/ˈbæk.pæk/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A bag with straps that is worn on the back to carry books or belongings.',
+      'example': 'She packed her backpack for school.',
+    },
+    'bag': {
+      'phonetic': '/bæɡ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A container made of paper, cloth, or plastic, used for carrying things.',
+      'example': 'He put the groceries in a bag.',
+    },
+    'basket': {
+      'phonetic': '/ˈbɑː.skɪt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A container made of woven material, used for holding or carrying things.',
+      'example': 'She put the fruit in a basket.',
+    },
+    'belt': {
+      'phonetic': '/belt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A strip of leather or fabric worn around the waist to hold up clothing.',
+      'example': 'He wore a brown belt with his trousers.',
+    },
+    'box': {
+      'phonetic': '/bɒks/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A container with stiff sides, used for holding or storing things.',
+      'example': 'She packed her books into a box.',
+    },
+    'cabinet': {
+      'phonetic': '/ˈkæb.ɪ.nət/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A piece of furniture with shelves or drawers, used for storage or display.',
+      'example': 'The dishes are kept in the kitchen cabinet.',
+    },
+    'cable': {
+      'phonetic': '/ˈkeɪ.bəl/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A thick wire or bundle of wires used to carry electricity or signals.',
+      'example': 'He plugged the cable into the laptop.',
+    },
+    'calculator': {
+      'phonetic': '/ˈkæl.kjə.leɪ.tər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'An electronic device used for performing mathematical calculations.',
+      'example': 'She used a calculator to solve the math problem.',
+    },
+    'camera': {
+      'phonetic': '/ˈkæm.rə/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A device used for taking photographs or recording video.',
+      'example': 'He took a picture with his camera.',
+    },
+    'chicken': {
+      'phonetic': '/ˈtʃɪk.ɪn/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A common farm bird kept for its eggs and meat.',
+      'example': 'The chicken laid an egg in the coop.',
+    },
+    'coin': {
+      'phonetic': '/kɔɪn/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A small, flat piece of metal used as money.',
+      'example': 'He found a coin on the ground.',
+    },
+    'crosswalk': {
+      'phonetic': '/ˈkrɒs.wɔːk/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A marked path where pedestrians can safely cross a street.',
+      'example': 'Wait for the signal before crossing at the crosswalk.',
+    },
+    'cube': {
+      'phonetic': '/kjuːb/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A solid object with six equal square sides.',
+      'example': 'He solved the puzzle cube in under a minute.',
+    },
+    'curtain': {
+      'phonetic': '/ˈkɜː.tən/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A piece of fabric hung to cover a window or divide a room.',
+      'example': 'She closed the curtain to block the sunlight.',
+    },
+    'door': {
+      'phonetic': '/dɔːr/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A hinged or sliding barrier used to open and close an entrance.',
+      'example': 'Please close the door behind you.',
+    },
+    'duck': {
+      'phonetic': '/dʌk/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A water bird with a broad beak and webbed feet.',
+      'example': 'The duck swam across the pond.',
+    },
+    'eyeglass': {
+      'phonetic': '/ˈaɪ.ɡlæs/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A lens worn in front of the eye to improve vision, usually used in the plural as "eyeglasses".',
+      'example': 'He put on his eyeglasses to read the sign.',
+    },
+    'fan': {
+      'phonetic': '/fæn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A device with rotating blades used to move air and cool a space.',
+      'example': 'She turned on the fan to cool the room.',
+    },
+    'fork': {
+      'phonetic': '/fɔːrk/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A utensil with prongs, used for lifting food to the mouth.',
+      'example': 'He ate his salad with a fork.',
+    },
+    'fountain': {
+      'phonetic': '/ˈfaʊn.tən/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A structure that shoots water into the air, often found in parks or squares.',
+      'example': 'Children love to play near the fountain.',
+    },
+    'frog': {
+      'phonetic': '/frɒɡ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small, tailless amphibian known for jumping and living near water.',
+      'example': 'The frog jumped into the pond.',
+    },
+    'handle': {
+      'phonetic': '/ˈhæn.dəl/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A part of an object designed to be held or operated by hand, such as on a door.',
+      'example': 'Turn the handle to open the door.',
+    },
+    'hands': {
+      'phonetic': '/hændz/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'The parts of the body at the end of each arm, used for holding and touching things.',
+      'example': 'She washed her hands before eating.',
+    },
+    'hat': {
+      'phonetic': '/hæt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A covering worn on the head for warmth, protection, or style.',
+      'example': 'He wore a hat to block the sun.',
+    },
+    'kettle': {
+      'phonetic': '/ˈket.əl/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A container used for boiling water, usually with a spout and handle.',
+      'example': 'She boiled water in the kettle for tea.',
+    },
+    'lamppost': {
+      'phonetic': '/ˈlæmp.poʊst/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A post supporting a light, usually found along a street.',
+      'example': 'The lamppost lit up the dark street.',
+    },
+    'mask': {
+      'phonetic': '/mɑːsk/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A covering worn over the face for protection, disguise, or decoration.',
+      'example': 'He wore a mask to protect against dust.',
+    },
+    'microphone': {
+      'phonetic': '/ˈmaɪ.krə.foʊn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A device used to capture and amplify sound, especially for recording or speaking.',
+      'example': 'She spoke into the microphone during the presentation.',
+    },
+    'mug': {
+      'phonetic': '/mʌɡ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A large, sturdy cup with a handle, used for drinking hot beverages.',
+      'example': 'He drank his coffee from a mug.',
+    },
+    'notebook': {
+      'phonetic': '/ˈnoʊt.bʊk/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A book of blank or ruled pages used for writing notes.',
+      'example': 'She wrote her ideas in a notebook.',
+    },
+    'outlet': {
+      'phonetic': '/ˈaʊt.lɛt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A socket in a wall used to connect electrical devices to a power supply.',
+      'example': 'He plugged the charger into the outlet.',
+    },
+    'paper': {
+      'phonetic': '/ˈpeɪ.pər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A thin material made from wood pulp, used for writing, printing, or wrapping.',
+      'example': 'She wrote a letter on a piece of paper.',
+    },
+    'person': {
+      'phonetic': '/ˈpɜː.sən/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A human being, regarded as an individual.',
+      'example': 'A person was standing at the door.',
+    },
+    'pillow': {
+      'phonetic': '/ˈpɪl.oʊ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A soft cushion used to support the head while sleeping or resting.',
+      'example': 'He rested his head on the pillow.',
+    },
+    'projector': {
+      'phonetic': '/prəˈdʒek.tər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A device that projects images or video onto a screen or surface.',
+      'example': 'The teacher used a projector to show the slides.',
+    },
+    'rabbit': {
+      'phonetic': '/ˈræb.ɪt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small mammal with long ears, known for hopping and living in burrows.',
+      'example': 'The rabbit hopped across the garden.',
+    },
+    'rat': {
+      'phonetic': '/ræt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A rodent with a long tail, similar to but larger than a mouse.',
+      'example': 'A rat scurried across the floor.',
+    },
+    'ring': {
+      'phonetic': '/rɪŋ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small circular band, typically made of metal, worn on a finger.',
+      'example': 'She wore a gold ring on her finger.',
+    },
+    'ruler': {
+      'phonetic': '/ˈruː.lər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A straight strip of wood, metal, or plastic, marked with units, used for measuring or drawing lines.',
+      'example': 'He used a ruler to draw a straight line.',
+    },
+    'shirt': {
+      'phonetic': '/ʃɜːrt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A piece of clothing worn on the upper body, usually with a collar and sleeves.',
+      'example': 'He wore a blue shirt to work.',
+    },
+    'shoe': {
+      'phonetic': '/ʃuː/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'An outer covering for the foot, usually made of leather or synthetic material.',
+      'example': 'She tied the laces of her shoe.',
+    },
+    'shoes': {
+      'phonetic': '/ʃuːz/',
+      'partOfSpeech': 'Noun',
+      'definition': 'Outer coverings worn on the feet, in pairs.',
+      'example': 'He put on his shoes before going outside.',
+    },
+    'sign': {
+      'phonetic': '/saɪn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A board or notice displaying information or instructions, such as a stop or traffic sign.',
+      'example': 'The driver stopped at the stop sign.',
+    },
+    'sink': {
+      'phonetic': '/sɪŋk/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A fixed basin with a water supply and drain, used for washing.',
+      'example': 'She washed the dishes in the sink.',
+    },
+    'skirt': {
+      'phonetic': '/skɜːrt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A piece of clothing that hangs from the waist, worn by women and girls.',
+      'example': 'She wore a blue skirt to the party.',
+    },
+    'snack': {
+      'phonetic': '/snæk/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A small amount of food eaten between meals.',
+      'example': 'She had a snack of fruit in the afternoon.',
+    },
+    'snake': {
+      'phonetic': '/sneɪk/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A long, legless reptile that moves by slithering.',
+      'example': 'The snake slid quietly through the grass.',
+    },
+    'sofa': {
+      'phonetic': '/ˈsoʊ.fə/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A long, upholstered seat for more than one person, typically found in a living room.',
+      'example': 'They relaxed on the sofa after dinner.',
+    },
+    'stair': {
+      'phonetic': '/steər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'One of a set of steps used for going up or down between floors.',
+      'example': 'She climbed the stair carefully.',
+    },
+    'stapler': {
+      'phonetic': '/ˈsteɪ.plər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A device used to fasten sheets of paper together with staples.',
+      'example': 'He used a stapler to attach the pages.',
+    },
+    'trash': {
+      'phonetic': '/træʃ/',
+      'partOfSpeech': 'Noun',
+      'definition': 'Discarded material or waste; garbage.',
+      'example': 'Please throw the trash in the bin.',
+    },
+    'tripod': {
+      'phonetic': '/ˈtraɪ.pɒd/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A three-legged stand used to support a camera or other equipment.',
+      'example': 'He set up the camera on a tripod.',
+    },
+    'wallet': {
+      'phonetic': '/ˈwɒl.ɪt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small, flat case used for carrying money, cards, and personal items.',
+      'example': 'He kept his cash in his wallet.',
+    },
+    'watch': {
+      'phonetic': '/wɒtʃ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small timepiece worn on the wrist or carried, used to tell time.',
+      'example': 'She checked the time on her watch.',
+    },
   };
 }

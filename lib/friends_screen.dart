@@ -33,12 +33,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Future<void> _loadAll() async {
     setState(() => _loading = true);
     if (_isSearchOnly) {
-      // Search mode only needs outgoing requests, so "Requested" pills
-      // render correctly on search results.
+      // Also needs incoming requests now — this is the screen the
+      // Profile's friend-add icon opens, and its notification dot is
+      // driven by incoming requests, so tapping it has to actually show
+      // them, not just a search box with no visible reason for the dot.
       final outgoing = await FirestoreService.getOutgoingRequests();
+      final incoming = await FirestoreService.getIncomingRequests();
       if (!mounted) return;
       setState(() {
         _outgoingUids = outgoing.map((r) => r['to'] as String).toSet();
+        _incoming = incoming;
         _loading = false;
       });
       return;
@@ -170,6 +174,43 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 children: [
                   if (_isSearchOnly) ...[
                     // ── Search-only mode ────────────────────────────────
+                    if (_incoming.isNotEmpty) ...[
+                      _SectionLabel('FRIEND REQUESTS', dark),
+                      const SizedBox(height: 10),
+                      ..._incoming.map((r) => _UserTile(
+                            name: r['fromName'] ?? 'Someone',
+                            dark: dark,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                GestureDetector(
+                                  onTap: () => _decline(r),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    child: Icon(Icons.close_rounded,
+                                        color: AppColors.textSecondary(dark),
+                                        size: 22),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _accept(r),
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppColors.cyan,
+                                    ),
+                                    child: const Icon(Icons.check_rounded,
+                                        color: Colors.black, size: 18),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
+                      const SizedBox(height: 24),
+                    ],
                     Container(
                       decoration: BoxDecoration(
                         color: AppColors.card(dark),

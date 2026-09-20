@@ -345,19 +345,24 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _saving ? null : _save,
+                            onPressed: (_saving || _saved) ? null : _save,
                             icon: _saving
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.black))
-                                : const Icon(Icons.add_rounded, color: Colors.black),
+                                : Icon(
+                                    _saved ? Icons.check_rounded : Icons.add_rounded,
+                                    color: Colors.black,
+                                  ),
                             label: Text(_saved ? 'Saved' : 'Save',
                                 style: const TextStyle(
                                     color: Colors.black, fontWeight: FontWeight.w700)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.cyan,
+                              disabledBackgroundColor: AppColors.cyan.withValues(alpha: 0.6),
+                              disabledForegroundColor: Colors.black,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14)),

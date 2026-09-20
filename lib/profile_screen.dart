@@ -730,12 +730,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  IconButton(
-                    onPressed: _openSearch,
-                    icon: Icon(
-                      Icons.search_rounded,
-                      color: AppColors.textPrimary(dark),
-                    ),
+                  StreamBuilder<int>(
+                    stream: FirestoreService.watchIncomingRequestCount(),
+                    builder: (context, snapshot) {
+                      final pending = snapshot.data ?? 0;
+
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          IconButton(
+                            onPressed: _openSearch,
+                            icon: Icon(
+                              Icons.person_add_alt_1_rounded,
+                              color: AppColors.textPrimary(dark),
+                            ),
+                          ),
+                          if (pending > 0)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                width: 9,
+                                height: 9,
+                                decoration: const BoxDecoration(
+                                  color: Colors.redAccent,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                   IconButton(
                     onPressed: _openEdit,

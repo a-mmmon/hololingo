@@ -633,6 +633,18 @@ class FirestoreService {
     }
   }
 
+  /// Live count of pending incoming friend requests, for the Profile
+  /// screen's notification dot on the add-friend icon.
+  static Stream<int> watchIncomingRequestCount() {
+    return _db
+        .collection('friend_requests')
+        .where('to', isEqualTo: _uid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) => snap.docs.length)
+        .handleError((e) => debugPrint('watchIncomingRequestCount error: $e'));
+  }
+
   static Future<List<Map<String, dynamic>>> getOutgoingRequests() async {
     try {
       final snap = await _db
