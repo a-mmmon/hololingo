@@ -5,6 +5,7 @@ import 'app_theme.dart';
 import 'firestore_service.dart';
 import 'daily_battle_service.dart';
 import 'edit_profile_screen.dart';
+import 'fake_checkout_screen.dart';
 import 'friends_screen.dart';
 import 'premium_paywall.dart';
 import 'premium_status.dart';
@@ -45,6 +46,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  Future<void> _buyCoins() async {
+    final confirmed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => FakeCheckoutScreen(
+          title: '${DailyBattleService.coinRefillAmount} Coins',
+          priceLabel: '฿20',
+          onConfirm: () => FirestoreService.addRewards(
+            tokens: DailyBattleService.coinRefillAmount,
+            xp: 0,
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await _loadProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('+${DailyBattleService.coinRefillAmount} coins!')),
+      );
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -839,6 +863,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       dark: dark,
                     ),
                   ],
+                ),
+              ),
+
+              Center(
+                child: TextButton.icon(
+                  onPressed: _buyCoins,
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                  label: const Text('Get more coins'),
                 ),
               ),
 

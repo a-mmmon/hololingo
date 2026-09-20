@@ -40,6 +40,8 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
     final date = DailyBattleService.todayKey();
 
     try {
+      await DailyBattleService.claimFreeTopUpIfNeeded(widget.eventId);
+
       final battleId = await DailyBattleService.findOrJoinQueue(
         eventId: widget.eventId,
         date: date,

@@ -1,14 +1,57 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
 
 import 'app_theme.dart';
-import 'subscription_service.dart';
+import 'fake_checkout_screen.dart';
+import 'firestore_service.dart';
+
+/// Bonus tokens granted on top of Premium status when subscribing — a perk,
+/// separate from what the subscription itself unlocks (topics/limits).
+const int kSubscriptionBonusTokens = 100;
+
+class _PlanOption {
+  final String id;
+  final String label;
+  final String priceLabel;
+  final Duration duration;
+  final bool bestValue;
+
+  const _PlanOption({
+    required this.id,
+    required this.label,
+    required this.priceLabel,
+    required this.duration,
+    this.bestValue = false,
+  });
+}
+
+// Exhibition-demo pricing — the real prices will come from App Store
+// Connect once StoreKit is actually configured; these exist only so the
+// fake checkout has something to show.
+const List<_PlanOption> _plans = [
+  _PlanOption(
+    id: 'com.hololingo.premium.monthly',
+    label: 'Monthly',
+    priceLabel: '\$4.99 / month',
+    duration: Duration(days: 30),
+  ),
+  _PlanOption(
+    id: 'com.hololingo.premium.yearly',
+    label: 'Yearly',
+    priceLabel: '\$39.99 / year',
+    duration: Duration(days: 365),
+    bestValue: true,
+  ),
+];
 
 /// Shared Premium paywall sheet — opened from both the Profile screen's
 /// Subscription row and a locked premium topic in Topics, so there's one
-/// real purchase flow instead of duplicated paywall UI.
+/// purchase flow instead of duplicated paywall UI.
+///
+/// IMPORTANT — this currently goes through FakeCheckoutScreen, not real
+/// Apple StoreKit, since there's no approved Developer Program account or
+/// App Store Connect products yet (needed for an exhibition demo on a
+/// tight timeline). Swap `_confirm` below to call `SubscriptionService.buy`
+/// once that's set up — nothing else about this file needs to change.
 Future<void> showPremiumPaywall(BuildContext context) {
   final dark = ThemeProvider.isDark(context);
 
@@ -31,146 +74,44 @@ class _PremiumPaywallSheet extends StatefulWidget {
 }
 
 class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
-  List<ProductDetails> _products = [];
-  ProductDetails? _selected;
-  bool _loading = true;
+  _PlanOption _selected = _plans.last;
   bool _purchasing = false;
-  String? _loadError;
-
-  StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _purchaseSubscription = InAppPurchase.instance.purchaseStream.listen(
-      _onPurchaseUpdate,
-    );
-
-    _loadProducts();
-  }
-
-  Future<void> _loadProducts() async {
-    try {
-      final response = await SubscriptionService.queryProducts();
-
-      if (!mounted) {
-        return;
-      }
-
-      if (response.error != null || response.productDetails.isEmpty) {
-        setState(() {
-          _loading = false;
-          _loadError = 'Subscriptions are unavailable right now.';
-        });
-        return;
-      }
-
-      final products = response.productDetails;
-
-      setState(() {
-        _products = products;
-        _selected = products.firstWhere(
-          (p) => p.id == SubscriptionService.premiumYearlyId,
-          orElse: () => products.first,
-        );
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _loading = false;
-        _loadError = 'Subscriptions are unavailable right now.';
-      });
-    }
-  }
-
-  void _onPurchaseUpdate(List<PurchaseDetails> purchases) {
-    final selected = _selected;
-
-    if (selected == null) {
-      return;
-    }
-
-    for (final purchase in purchases) {
-      if (purchase.productID != selected.id) {
-        continue;
-      }
-
-      switch (purchase.status) {
-        case PurchaseStatus.purchased:
-        case PurchaseStatus.restored:
-          if (mounted) {
-            Navigator.of(context).pop();
-          }
-          break;
-
-        case PurchaseStatus.error:
-        case PurchaseStatus.canceled:
-          if (mounted) {
-            setState(() => _purchasing = false);
-          }
-          break;
-
-        case PurchaseStatus.pending:
-          break;
-      }
-    }
-  }
 
   Future<void> _buy() async {
-    final product = _selected;
-
-    if (product == null || _purchasing) {
-      return;
-    }
+    if (_purchasing) return;
 
     setState(() => _purchasing = true);
 
-    try {
-      await SubscriptionService.buy(product);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
+    final confirmed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => FakeCheckoutScreen(
+          title: 'HoloLingo Premium — ${_selected.label}',
+          priceLabel: _selected.priceLabel,
+          onConfirm: () async {
+            await FirestoreService.updateSubscriptionStatus(
+              productId: _selected.id,
+              expiresAt: DateTime.now().add(_selected.duration),
+              transactionId: 'demo-${DateTime.now().millisecondsSinceEpoch}',
+              verificationData: 'demo-checkout',
+            );
+            await FirestoreService.addRewards(
+              tokens: kSubscriptionBonusTokens,
+              xp: 0,
+            );
+          },
+        ),
+      ),
+    );
 
-      setState(() => _purchasing = false);
+    if (!mounted) return;
+    setState(() => _purchasing = false);
 
+    if (confirmed == true) {
+      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not start purchase.')),
+        SnackBar(content: Text('Welcome to Premium! +$kSubscriptionBonusTokens coins.')),
       );
     }
-  }
-
-  Future<void> _restore() async {
-    try {
-      await SubscriptionService.restore();
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Restoring purchases…')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not restore purchases.')),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _purchaseSubscription?.cancel();
-    super.dispose();
   }
 
   @override
@@ -205,7 +146,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Unlock every topic and remove limits on your learning.',
+              'Unlock every topic and get $kSubscriptionBonusTokens bonus coins.',
               style: TextStyle(
                 color: AppColors.textSecondary(dark),
                 fontSize: 14,
@@ -213,7 +154,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
               ),
             ),
             const SizedBox(height: 18),
-            ...['Unlocked topics', 'Remove ads'].map(
+            ...['Unlocked topics', 'Remove ads', '$kSubscriptionBonusTokens bonus coins'].map(
               (text) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
@@ -238,77 +179,49 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
               ),
             ),
             const SizedBox(height: 10),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 28),
-                child: Center(
-                  child: CircularProgressIndicator(color: AppColors.cyan),
-                ),
-              )
-            else if (_loadError != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _loadError!,
-                  style: TextStyle(color: AppColors.textSecondary(dark)),
-                ),
-              )
-            else ...[
-              ..._products.map(_buildProductOption),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _purchasing ? null : _buy,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.cyan,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+            ..._plans.map(_buildPlanOption),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _purchasing ? null : _buy,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.cyan,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: _purchasing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
-                          ),
-                        )
-                      : const Text(
-                          'Continue',
-                          style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                child: _purchasing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black,
                         ),
-                ),
+                      )
+                    : const Text(
+                        'Continue',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
               ),
-              const SizedBox(height: 8),
-              Center(
-                child: TextButton(
-                  onPressed: _purchasing ? null : _restore,
-                  child: Text(
-                    'Restore Purchases',
-                    style: TextStyle(color: AppColors.textSecondary(dark)),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildProductOption(ProductDetails product) {
+  Widget _buildPlanOption(_PlanOption plan) {
     final dark = ThemeProvider.isDark(context);
-    final selected = _selected?.id == product.id;
-    final isYearly = product.id == SubscriptionService.premiumYearlyId;
+    final selected = _selected.id == plan.id;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
-        onTap: _purchasing ? null : () => setState(() => _selected = product),
+        onTap: _purchasing ? null : () => setState(() => _selected = plan),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
@@ -337,14 +250,14 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
                     Row(
                       children: [
                         Text(
-                          isYearly ? 'Yearly' : 'Monthly',
+                          plan.label,
                           style: TextStyle(
                             color: AppColors.textPrimary(dark),
                             fontWeight: FontWeight.w700,
                             fontSize: 15,
                           ),
                         ),
-                        if (isYearly) ...[
+                        if (plan.bestValue) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -369,9 +282,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isYearly
-                          ? '${product.price} / year'
-                          : '${product.price} / month',
+                      plan.priceLabel,
                       style: TextStyle(
                         color: AppColors.textSecondary(dark),
                         fontSize: 13,

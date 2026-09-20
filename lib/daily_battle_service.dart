@@ -1,24 +1,28 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 
-import 'coin_battle_service.dart';
 import 'firestore_service.dart';
 
 /// ============================================================================
 /// DAILY CHALLENGE SERVICE
 /// ============================================================================
 ///
-/// Event-scoped, admin-curated 1v1 battles — a separate mode from the casual
-/// Coin Battle. Fixed 20-coin wager, both players see the SAME 10 admin-set
-/// Thai -> English rounds for that calendar day, matched via a queue instead
-/// of browsing a challenge list. Score per round rewards both correctness and
-/// speed (Kahoot-style); higher total score wins.
+/// Event-scoped, admin-curated 1v1 battles — the only wager mode this app
+/// has (a separate casual, player-chosen-wager mode was built and then
+/// deliberately dropped in favor of keeping this the one wager game, tied to
+/// live events). Fixed 20-coin wager, both players see the SAME 10 admin-set
+/// Thai -> English rounds for that calendar day, matched via a queue.
+/// Score per round rewards both correctness and speed (Kahoot-style); higher
+/// total score wins.
 ///
-/// Same no-Cloud-Function trade-off as Coin Battle: the winner and coin
-/// transfer are validated by firestore.rules instead of a trusted server.
-/// Two things are explicitly NOT rules-verifiable and are disclosed,
-/// client-trusted simplifications:
+/// There is no Cloud Function refereeing this (Spark plan, no billing
+/// account on this project). The winner and coin transfer are validated by
+/// firestore.rules instead of a trusted server. Two things are explicitly
+/// NOT rules-verifiable and are disclosed, client-trusted simplifications:
 ///   - a player's own reported elapsed_ms per round (a modified client could
 ///     under-report it for a higher score) — rules only bounds-check it's a
 ///     non-negative int, not that it's truthful.
@@ -33,6 +37,34 @@ class DailyBattleService {
 
   static const int wager = 20;
   static const int roundCount = 10;
+
+  static const int defaultCoinFloor = 10;
+  static const int defaultFreeTopUp = 75;
+
+  // ============================================================
+  // SETTINGS (admin-configurable, config/daily_challenge_settings)
+  // ============================================================
+
+  static Future<Map<String, int>> getSettings() async {
+    try {
+      final doc = await _db
+          .collection('config')
+          .doc('daily_challenge_settings')
+          .get();
+
+      final data = doc.data() ?? {};
+
+      return {
+        'coin_floor': (data['coin_floor'] as num?)?.toInt() ?? defaultCoinFloor,
+        'free_top_up': (data['free_top_up'] as num?)?.toInt() ?? defaultFreeTopUp,
+      };
+    } catch (e) {
+      return {
+        'coin_floor': defaultCoinFloor,
+        'free_top_up': defaultFreeTopUp,
+      };
+    }
+  }
 
   static String todayKey() {
     final now = DateTime.now().toUtc();
@@ -79,6 +111,33 @@ class DailyBattleService {
     } catch (e) {
       debugPrint('hasTodaysChallenge error: $e');
       return false;
+    }
+  }
+
+  /// Grants this event's one-time free top-up the first time this user
+  /// interacts with it — so someone who hasn't earned tokens from Topics
+  /// yet isn't forced to buy the refill pack just to try the Daily
+  /// Challenge. Safe to call every time the queue screen opens; no-ops
+  /// instantly once already claimed.
+  static Future<void> claimFreeTopUpIfNeeded(String eventId) async {
+    try {
+      final claimRef =
+          _db.collection('users').doc(_uid).collection('event_topups').doc(eventId);
+
+      final claimSnap = await claimRef.get();
+      if (claimSnap.exists) return;
+
+      final settings = await getSettings();
+      final amount = settings['free_top_up'] ?? defaultFreeTopUp;
+
+      await claimRef.set({'claimed_at': FieldValue.serverTimestamp(), 'amount': amount});
+
+      await _db.collection('users').doc(_uid).set(
+        {'tokens': FieldValue.increment(amount)},
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      debugPrint('claimFreeTopUpIfNeeded error: $e');
     }
   }
 
@@ -142,7 +201,7 @@ class DailyBattleService {
     required String eventId,
     required String date,
   }) async {
-    final settings = await CoinBattleService.getSettings();
+    final settings = await getSettings();
     final battleRef = _db.collection('daily_battles').doc();
 
     try {
@@ -466,5 +525,91 @@ class DailyBattleService {
     } catch (e) {
       debugPrint('checkAndCrownChampionIfEnded error: $e');
     }
+  }
+
+  // ============================================================
+  // COIN REFILL PURCHASE (consumable IAP)
+  //
+  // Same client-trusted pattern as the Premium subscription — Apple
+  // charges the user and pays out on its own, independent of this;
+  // there's no server here to double-check the receipt before
+  // crediting coins, which is an accepted trade-off, not a new one.
+  // ============================================================
+
+  static const String coinRefillProductId = 'com.hololingo.coins.refill';
+  static const int coinRefillAmount = 100;
+
+  static final InAppPurchase _iap = InAppPurchase.instance;
+  static StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
+  static bool _purchasesInitialized = false;
+
+  static final ValueNotifier<String?> refillError = ValueNotifier<String?>(null);
+
+  static Future<void> initPurchases() async {
+    if (_purchasesInitialized) return;
+    _purchasesInitialized = true;
+
+    final available = await _iap.isAvailable();
+    if (!available) {
+      debugPrint('DailyBattleService: store unavailable.');
+      return;
+    }
+
+    _purchaseSubscription = _iap.purchaseStream.listen(
+      _handlePurchaseUpdates,
+      onError: (Object error) {
+        debugPrint('DailyBattleService: purchase stream error: $error');
+      },
+    );
+  }
+
+  static Future<ProductDetailsResponse> queryRefillProduct() {
+    return _iap.queryProductDetails({coinRefillProductId});
+  }
+
+  static Future<void> buyRefill(ProductDetails product) {
+    final purchaseParam = PurchaseParam(productDetails: product);
+    return _iap.buyConsumable(purchaseParam: purchaseParam, autoConsume: true);
+  }
+
+  static Future<void> _handlePurchaseUpdates(
+    List<PurchaseDetails> purchases,
+  ) async {
+    for (final purchase in purchases) {
+      if (purchase.productID != coinRefillProductId) continue;
+
+      switch (purchase.status) {
+        case PurchaseStatus.error:
+          refillError.value = purchase.error?.message ?? 'Purchase failed.';
+          debugPrint('DailyBattleService: purchase error: ${purchase.error}');
+          break;
+
+        case PurchaseStatus.purchased:
+        case PurchaseStatus.restored:
+          try {
+            await _db.collection('users').doc(_uid).set(
+              {'tokens': FieldValue.increment(coinRefillAmount)},
+              SetOptions(merge: true),
+            );
+          } catch (e) {
+            debugPrint('DailyBattleService: could not credit coins: $e');
+          }
+          break;
+
+        case PurchaseStatus.pending:
+        case PurchaseStatus.canceled:
+          break;
+      }
+
+      if (purchase.pendingCompletePurchase) {
+        await _iap.completePurchase(purchase);
+      }
+    }
+  }
+
+  static void disposePurchases() {
+    _purchaseSubscription?.cancel();
+    _purchaseSubscription = null;
+    _purchasesInitialized = false;
   }
 }

@@ -5,7 +5,6 @@ import 'app_theme.dart';
 import 'firestore_service.dart';
 import 'saved_screen.dart';
 import 'main.dart';
-import 'coin_battle_screen.dart';
 import 'daily_battle_service.dart';
 import 'daily_challenge_queue_screen.dart';
 
@@ -1073,58 +1072,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(
                 height: 20,
-              ),
-
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CoinBattleScreen()),
-                ),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.card(dark),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.border(dark)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.monetization_on_rounded,
-                        color: AppColors.cyan,
-                        size: 30,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Coin Battle',
-                              style: TextStyle(
-                                color: AppColors.textPrimary(dark),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              'Wager coins in a 1v1 vocab challenge',
-                              style: TextStyle(
-                                color: AppColors.textSecondary(dark),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppColors.textSecondary(dark),
-                      ),
-                    ],
-                  ),
-                ),
               ),
 
               if (_isEventLive() && _currentEventId != null) ...[
