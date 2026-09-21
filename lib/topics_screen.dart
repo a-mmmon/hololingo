@@ -9,7 +9,6 @@ import 'premium_paywall.dart';
 import 'premium_status.dart';
 import 'topics_data.dart';
 import 'topic_word_grid_screen.dart';
-import 'live_event_card.dart';
 
 class TopicsScreen extends StatefulWidget {
   const TopicsScreen({super.key});
@@ -182,23 +181,6 @@ class _TopicsScreenState extends State<TopicsScreen> {
     }
 
     return _currentEvent!['active'] == true;
-  }
-
-  bool get _eventIsLive {
-    if (!_eventIsConfigured) {
-      return false;
-    }
-
-    final start = _eventStart;
-    final end = _eventEnd;
-
-    if (start == null || end == null) {
-      return false;
-    }
-
-    final now = DateTime.now();
-
-    return !now.isBefore(start) && now.isBefore(end);
   }
 
   bool get _eventIsUpcoming {
@@ -587,33 +569,6 @@ class _TopicsScreenState extends State<TopicsScreen> {
                     ),
 
                   if (_eventIsUpcoming)
-                    const SizedBox(
-                      height: 14,
-                    ),
-
-                  // ==================================================
-                  // LIVE EVENT
-                  //
-                  // ONLY appears while event is running.
-                  // Notification card disappears.
-                  // ==================================================
-
-                  if (_eventIsLive)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                      ),
-                      child: LiveEventCard(
-                        eventName: _eventName,
-                        eventType: _eventType,
-                        eventDate: _eventDateText,
-                        description:
-                            "The event is live! Join today's Daily Challenge from the Home screen.",
-                        dark: dark,
-                      ),
-                    ),
-
-                  if (_eventIsLive)
                     const SizedBox(
                       height: 14,
                     ),

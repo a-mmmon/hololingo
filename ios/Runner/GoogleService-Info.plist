@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>235920291560-1d2ichukfklprcvce8g193oas1p8ub95.apps.googleusercontent.com</string>
+	<string>235920291560-fgtfdics3n1n2bbian39u6hvvima39q0.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.235920291560-1d2ichukfklprcvce8g193oas1p8ub95</string>
+	<string>com.googleusercontent.apps.235920291560-fgtfdics3n1n2bbian39u6hvvima39q0</string>
 	<key>API_KEY</key>
 	<string>AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.arLanguageApp</string>
+	<string>com.hooligan.hololingo</string>
 	<key>PROJECT_ID</key>
 	<string>hololingo-da112</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:235920291560:ios:afb9347e6ef8166b19bb5d</string>
+	<string>1:235920291560:ios:20a961578bbecca619bb5d</string>
 </dict>
 </plist>

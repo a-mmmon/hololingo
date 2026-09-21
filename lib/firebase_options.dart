@@ -52,18 +52,18 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0',
-    appId: '1:235920291560:ios:afb9347e6ef8166b19bb5d',
+    appId: '1:235920291560:ios:20a961578bbecca619bb5d',
     messagingSenderId: '235920291560',
     projectId: 'hololingo-da112',
     storageBucket: 'hololingo-da112.firebasestorage.app',
-    iosBundleId: 'com.example.arLanguageApp',
+    iosBundleId: 'com.hooligan.hololingo',
   );
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyASuhAeT4jVbjTm37Rgjf8xFc0798qkAT0',
-    appId: '1:235920291560:ios:afb9347e6ef8166b19bb5d',
+    appId: '1:235920291560:ios:20a961578bbecca619bb5d',
     messagingSenderId: '235920291560',
     projectId: 'hololingo-da112',
     storageBucket: 'hololingo-da112.firebasestorage.app',
-    iosBundleId: 'com.example.arLanguageApp',
+    iosBundleId: 'com.hooligan.hololingo',
   );
 }
