@@ -4,7 +4,7 @@ description: Object scanning vocabulary learning app
 
 publish_to: "none"
 
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -45,7 +45,6 @@ flutter:
 
   assets:
     - assets/hololingo.png
-    - assets/detect.tflite
     - assets/Models/best.tflite
     - assets/dictionary/a/
     - assets/dictionary/b/
