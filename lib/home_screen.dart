@@ -1472,8 +1472,8 @@ class _DailyChallengeEventCardState extends State<_DailyChallengeEventCard> {
       eventType: widget.eventType,
       eventDate: widget.eventDate,
       description: exhausted
-          ? "You've used all ${DailyBattleService.maxPlaysPerDay} Daily "
-              'Challenge attempts for today — come back tomorrow!'
+          ? '${DailyBattleService.maxPlaysPerDay} Daily Challenges completed '
+              'for today. Come back tomorrow!'
           : "The event is live! Wager ${DailyBattleService.wager} tokens and "
               'beat another player — $remaining of '
               '${DailyBattleService.maxPlaysPerDay} attempts left today.',

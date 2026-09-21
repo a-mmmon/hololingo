@@ -75,8 +75,8 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
       setState(() {
         _joining = false;
         _error = e is DailyChallengeLimitReached
-            ? "You've used all ${DailyBattleService.maxPlaysPerDay} Daily "
-                'Challenge attempts for today — come back tomorrow!'
+            ? '${DailyBattleService.maxPlaysPerDay} Daily Challenges completed '
+                'for today. Come back tomorrow!'
             : 'Could not join the challenge.';
       });
     }

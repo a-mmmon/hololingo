@@ -395,10 +395,12 @@ class _VocabDetailScreenState extends State<VocabDetailScreen> {
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.black))
                                 : Icon(
-                                    _saved ? Icons.check_rounded : Icons.add_rounded,
+                                    _saved
+                                        ? Icons.bookmark_remove_rounded
+                                        : Icons.add_rounded,
                                     color: Colors.black,
                                   ),
-                            label: Text(_saved ? 'Saved' : 'Save',
+                            label: Text(_saved ? 'Unsave' : 'Save',
                                 style: const TextStyle(
                                     color: Colors.black, fontWeight: FontWeight.w700)),
                             style: ElevatedButton.styleFrom(

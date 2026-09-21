@@ -967,7 +967,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
                         ),
                         SizedBox(height: 14),
                         Text(
-                          'Opening AR...',
+                          'Preparing...',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 15,
