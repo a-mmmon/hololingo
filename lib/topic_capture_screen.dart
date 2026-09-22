@@ -154,6 +154,17 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
   // waiting for a deliberate capture, and why the camera felt slow (the
   // CPU was constantly busy running detection even while just aiming).
 
+  Future<(XFile, DetectedObject?)> _takePhotoAndDetect(
+    CameraController controller,
+  ) async {
+    final photo = await controller.takePicture();
+    final detection = await DetectorService.detectObjectDetails(
+      photo.path,
+      targetLabel: widget.word.word,
+    );
+    return (photo, detection);
+  }
+
   Future<void> _capture() async {
     final controller = _controller;
 
@@ -168,17 +179,18 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
 
     try {
       // ---------------------------------------------------------------
-      // 1. Take the photo
+      // 1. Take the photo and detect the object
       // ---------------------------------------------------------------
-      final photo = await controller.takePicture();
+      var (photo, detectedDetails) = await _takePhotoAndDetect(controller);
 
-      // ---------------------------------------------------------------
-      // 2. Detect the object
-      // ---------------------------------------------------------------
-      final detectedDetails = await DetectorService.detectObjectDetails(
-        photo.path,
-        targetLabel: widget.word.word,
-      );
+      // A single unlucky frame (motion blur, a brief bad angle) can miss
+      // even when the object is genuinely there — one automatic retry
+      // catches that without reintroducing continuous background
+      // scanning (see the comment above this method for why that was
+      // removed).
+      if (detectedDetails == null) {
+        (photo, detectedDetails) = await _takePhotoAndDetect(controller);
+      }
 
       // A capture is only valid when the detector produces a reliable
       // detection. DetectorService filters low-confidence predictions.
@@ -197,12 +209,13 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       }
 
       final detected = detectedDetails.label;
+      final confidence = detectedDetails.confidence;
       final centerX = detectedDetails.centerX;
       final centerY = detectedDetails.centerY;
 
       debugPrint(
         'Detected object: $detected '
-        '(${(detectedDetails.confidence * 100).toStringAsFixed(1)}%)',
+        '(${(confidence * 100).toStringAsFixed(1)}%)',
       );
 
       // ---------------------------------------------------------------
@@ -236,7 +249,7 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
         _originalImagePath = photo.path;
         _capturedImagePath = processedPath;
         _detectedWord = detected;
-        _detectedConfidence = detectedDetails.confidence;
+        _detectedConfidence = confidence;
         _capturing = false;
       });
 

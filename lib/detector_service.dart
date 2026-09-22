@@ -148,7 +148,7 @@ class DetectorService {
   /// reliable enough to be treated as real objects. Keeping this at 0.35
   /// prevents weak predictions from being passed to the capture flow.
   static const double _confidenceThreshold = 0.35;
-  static const double _targetConfidenceThreshold = 0.12;
+  static const double _targetConfidenceThreshold = 0.08;
 
   /// Labels embedded in the bundled 89-class `best.tflite`, in class-index
   /// order — must match training/data.yaml's `names:` list exactly (same
