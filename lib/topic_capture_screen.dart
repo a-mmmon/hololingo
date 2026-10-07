@@ -318,83 +318,17 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
     });
   }
 
-  String? _normalize(String? value) {
-    if (value == null) return null;
-
-    final result =
-        value.toLowerCase().trim().replaceAll('_', ' ').replaceAll('-', ' ');
-
-    if (result.isEmpty) {
-      return null;
-    }
-
-    return result.replaceAll(
-      RegExp(r'\s+'),
-      ' ',
-    );
-  }
-
-  bool _isCorrectObject() {
-    final detected = _normalize(_detectedWord);
-    final expected = _normalize(widget.word.word);
-
-    if (detected == null || expected == null) {
-      return false;
-    }
-
-    if (detected == expected) {
-      return true;
-    }
-
-    const aliases = <String, List<String>>{
-      'cell phone': [
-        'cell phone',
-        'cellphone',
-        'mobile phone',
-        'mobile',
-        'phone',
-      ],
-      'backpack': [
-        'backpack',
-        'bag',
-      ],
-      'laptop': [
-        'laptop',
-        'notebook',
-      ],
-      'bicycle': [
-        'bicycle',
-        'bike',
-      ],
-      'cup': [
-        'cup',
-      ],
-      'scissors': [
-        'scissors',
-        'scissor',
-      ],
-      'bottle': [
-        'bottle',
-      ],
-      'chair': [
-        'chair',
-      ],
-      'book': [
-        'book',
-      ],
-      'keyboard': [
-        'keyboard',
-      ],
-    };
-
-    final expectedAliases = aliases[expected];
-
-    if (expectedAliases == null) {
-      return false;
-    }
-
-    return expectedAliases.contains(detected);
-  }
+  // detectObjectDetails() is called with targetLabel: widget.word.word in
+  // _capture() above, and already validates the match internally via
+  // DetectorService's own target-matching (including all its synonym
+  // handling) before ever returning a non-null result. A capture only
+  // reaches this screen's "captured" state when that has already
+  // succeeded, so no second, separate correctness check belongs here —
+  // one used to exist with its own hardcoded, much smaller alias list,
+  // which silently re-rejected objects the detector had already
+  // correctly matched (e.g. a MacBook classified as computer-monitor for
+  // the Laptop target) any time detector_service.dart's synonym list was
+  // updated without this one also being kept in sync.
 
   void _usePhoto() {
     final imagePath = _capturedImagePath;
@@ -403,63 +337,18 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       return;
     }
 
-    // Use the actual detector result. A wrong detected object must never
-    // be marked as correct or saved as a learned topic word.
-    final correct = _isCorrectObject();
-
-    if (correct) {
-      Navigator.pop(
-        context,
-        TopicCaptureResult(
-          success: true,
-          imagePath: imagePath,
-          detectedWord: _detectedWord,
-          phonetic: _phonetic,
-          partOfSpeech: 'Noun',
-          definition: _definition,
-          example: _example,
-        ),
-      );
-      return;
-    }
-
-    _showWrongObjectDialog();
-  }
-
-  Future<void> _showWrongObjectDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        final detected = _detectedWord ?? 'Unknown object';
-
-        return AlertDialog(
-          title: const Text(
-            'Try Again',
-          ),
-          content: Text(
-            'I detected "$detected".\n\n'
-            'Please try to capture '
-            '"${widget.word.word}".',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-              child: const Text(
-                'Try Again',
-              ),
-            ),
-          ],
-        );
-      },
+    Navigator.pop(
+      context,
+      TopicCaptureResult(
+        success: true,
+        imagePath: imagePath,
+        detectedWord: _detectedWord,
+        phonetic: _phonetic,
+        partOfSpeech: 'Noun',
+        definition: _definition,
+        example: _example,
+      ),
     );
-
-    if (!mounted) return;
-
-    _retake();
   }
 
   Widget _buildCameraError(bool dark) {
@@ -685,8 +574,9 @@ class _TopicCaptureScreenState extends State<TopicCaptureScreen> {
       return const SizedBox.shrink();
     }
 
-    // Show the real result from the detector.
-    final correct = _isCorrectObject();
+    // Reaching this view already means DetectorService confirmed a match
+    // for widget.word.word (see the comment above _usePhoto()).
+    const correct = true;
 
     return Stack(
       fit: StackFit.expand,

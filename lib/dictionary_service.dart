@@ -1186,5 +1186,205 @@ class DictionaryService {
           'A small timepiece worn on the wrist or carried, used to tell time.',
       'example': 'She checked the time on her watch.',
     },
+
+    // Added for the 135-class model (merged with 68 new classes) — kept
+    // offline so scanning these doesn't wait on the online dictionary API,
+    // which frequently times out or has no entry for compound/brand names.
+    'airpod': {
+      'phonetic': '/ˈeər.pɒd/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small wireless earbud used for listening to music or making calls.',
+      'example': 'He put his airpods in before going for a run.',
+    },
+    'bucket': {
+      'phonetic': '/ˈbʌk.ɪt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A round, open container with a handle, used for carrying or holding liquids.',
+      'example': 'She filled the bucket with water to clean the floor.',
+    },
+    'car key': {
+      'phonetic': '/kɑːr kiː/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A key used to lock, unlock, or start a car.',
+      'example': "He couldn't find his car key before leaving for work.",
+    },
+    'chess board': {
+      'phonetic': '/tʃes bɔːrd/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A board with 64 squares of alternating colors, used for playing chess.',
+      'example': 'They set up the pieces on the chess board.',
+    },
+    'coca-cola': {
+      'phonetic': '/ˌkoʊ.kə ˈkoʊ.lə/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A popular brand of carbonated soft drink.',
+      'example': 'She ordered a cold Coca-Cola with her lunch.',
+    },
+    'coconut': {
+      'phonetic': '/ˈkoʊ.kə.nʌt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A large brown fruit with a hard shell, white flesh, and sweet liquid inside.',
+      'example': 'He drank fresh coconut water on the beach.',
+    },
+    'dice': {
+      'phonetic': '/daɪs/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'Small cubes with numbered sides, used in games to generate random numbers.',
+      'example': 'She rolled the dice and moved her piece six spaces.',
+    },
+    'dress': {
+      'phonetic': '/dres/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A one-piece garment for a woman or girl that covers the body and extends over the legs.',
+      'example': 'She wore a blue dress to the party.',
+    },
+    'earbuds': {
+      'phonetic': '/ˈɪr.bʌdz/',
+      'partOfSpeech': 'Noun',
+      'definition': 'Small headphones that fit directly into the ear.',
+      'example': 'He listens to music with his earbuds on the bus.',
+    },
+    'earphone': {
+      'phonetic': '/ˈɪr.foʊn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A small device worn in or over the ear to listen to audio privately.',
+      'example': 'She put on her earphones to listen to a podcast.',
+    },
+    'eyeglasses': {
+      'phonetic': '/ˈaɪˌɡlæs.ɪz/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A pair of lenses in a frame, worn in front of the eyes to improve vision.',
+      'example': 'He wears eyeglasses to read small print.',
+    },
+    'football': {
+      'phonetic': '/ˈfʊt.bɔːl/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A round or oval ball used in sports such as soccer or American football.',
+      'example': 'The children played football in the park after school.',
+    },
+    'fries': {
+      'phonetic': '/fraɪz/',
+      'partOfSpeech': 'Noun',
+      'definition': 'Thin strips of potato that are deep-fried until crisp.',
+      'example': 'She ordered a burger with a side of fries.',
+    },
+    'glass': {
+      'phonetic': '/ɡlæs/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A container with no handle, typically made of a hard transparent material, used for drinking.',
+      'example': 'He poured orange juice into a glass.',
+    },
+    'gloves': {
+      'phonetic': '/ɡlʌvz/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A covering for the hand with separate sections for each finger, worn for protection or warmth.',
+      'example': 'She wore gloves to keep her hands warm in winter.',
+    },
+    'grasshopper': {
+      'phonetic': '/ˈɡræsˌhɒp.ər/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A jumping insect with long back legs, known for making a chirping sound.',
+      'example': 'A grasshopper jumped across the garden.',
+    },
+    'guitar': {
+      'phonetic': '/ɡɪˈtɑːr/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A stringed musical instrument played by plucking or strumming its strings.',
+      'example': 'He learned to play the guitar over the summer.',
+    },
+    'headphone': {
+      'phonetic': '/ˈhed.foʊn/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A pair of small speakers worn over or in the ears to listen to audio.',
+      'example': 'She wore headphones while studying in the library.',
+    },
+    'helmet': {
+      'phonetic': '/ˈhel.mɪt/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A hard hat worn to protect the head from injury.',
+      'example': 'He always wears a helmet when riding his motorcycle.',
+    },
+    'ladybugs': {
+      'phonetic': '/ˈleɪ.di.bʌɡz/',
+      'partOfSpeech': 'Noun',
+      'definition': 'Small round beetles, usually red with black spots.',
+      'example': 'They found a ladybug crawling on the leaf.',
+    },
+    'leaf': {
+      'phonetic': '/liːf/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A flat, usually green, part of a plant that grows from a stem or branch.',
+      'example': 'A leaf fell from the tree in autumn.',
+    },
+    'light': {
+      'phonetic': '/laɪt/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A device or source that produces brightness, allowing people to see.',
+      'example': 'She turned on the light when it got dark.',
+    },
+    'pepsi': {
+      'phonetic': '/ˈpep.si/',
+      'partOfSpeech': 'Noun',
+      'definition': 'A popular brand of carbonated soft drink.',
+      'example': 'He grabbed a cold can of Pepsi from the fridge.',
+    },
+    'rubiks cube': {
+      'phonetic': "/ˈruː.bɪks kjuːb/",
+      'partOfSpeech': 'Noun',
+      'definition':
+          "A puzzle cube with colored squares on each side that must be twisted to match colors on every face.",
+      'example': "It took her only two minutes to solve the Rubik's Cube.",
+    },
+    'scarf': {
+      'phonetic': '/skɑːrf/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A piece of fabric worn around the neck for warmth or style.',
+      'example': 'She wrapped a scarf around her neck to stay warm.',
+    },
+    'skateboard': {
+      'phonetic': '/ˈskeɪt.bɔːrd/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A short board mounted on wheels, ridden by standing on it and pushing with one foot.',
+      'example': 'He rode his skateboard to school every day.',
+    },
+    'student card': {
+      'phonetic': '/ˈstuː.dənt kɑːrd/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'An identification card issued to a student by their school or university.',
+      'example': 'She showed her student card to get a discount at the museum.',
+    },
+    'tie': {
+      'phonetic': '/taɪ/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A long, narrow piece of cloth worn around the neck, usually with a shirt, tied in a knot.',
+      'example': 'He wore a tie to the job interview.',
+    },
+    'wheel chair': {
+      'phonetic': '/wiːl tʃer/',
+      'partOfSpeech': 'Noun',
+      'definition':
+          'A chair mounted on wheels, used by people who have difficulty walking.',
+      'example': 'She uses a wheelchair to move around independently.',
+    },
   };
 }

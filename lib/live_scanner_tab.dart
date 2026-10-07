@@ -560,8 +560,11 @@ class _LiveScannerTabState extends State<LiveScannerTab>
           word: _detectedWord,
           definition: _definition,
           phonetic: _phonetic,
-        );
+        ).timeout(const Duration(seconds: 3));
       } catch (e) {
+        // Offline or slow connections must not block showing the AR result,
+        // recording the scan is best-effort logging, not required for the
+        // user to see what they just found.
         debugPrint('Could not record AR scan: $e');
       }
 
@@ -587,7 +590,7 @@ class _LiveScannerTabState extends State<LiveScannerTab>
         await FirestoreService.recordScan(
           word: word,
           definition: _definition,
-        );
+        ).timeout(const Duration(seconds: 3));
       } catch (recordError) {
         debugPrint('Could not record AR scan: $recordError');
       }

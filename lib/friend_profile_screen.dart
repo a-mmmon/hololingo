@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -10,6 +12,7 @@ class FriendProfileScreen extends StatefulWidget {
   final int level;
   final bool isBff;
   final int bondGoal;
+  final String? photoBase64;
 
   const FriendProfileScreen({
     super.key,
@@ -18,6 +21,7 @@ class FriendProfileScreen extends StatefulWidget {
     required this.level,
     required this.isBff,
     this.bondGoal = 20,
+    this.photoBase64,
   });
 
   @override
@@ -599,23 +603,35 @@ class _FriendProfileScreenState
                         AppColors.card(
                       dark,
                     ),
+                    image: (widget.photoBase64 != null &&
+                            widget.photoBase64!.isNotEmpty)
+                        ? DecorationImage(
+                            image: MemoryImage(
+                              base64Decode(widget.photoBase64!),
+                            ),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: Center(
-                    child: Text(
-                      widget.name.isNotEmpty
-                          ? widget.name[0]
-                              .toUpperCase()
-                          : '?',
-                      style:
-                          const TextStyle(
-                        fontSize: 36,
-                        fontWeight:
-                            FontWeight.w800,
-                        color:
-                            AppColors.cyan,
-                      ),
-                    ),
-                  ),
+                  child: (widget.photoBase64 == null ||
+                          widget.photoBase64!.isEmpty)
+                      ? Center(
+                          child: Text(
+                            widget.name.isNotEmpty
+                                ? widget.name[0]
+                                    .toUpperCase()
+                                : '?',
+                            style:
+                                const TextStyle(
+                              fontSize: 36,
+                              fontWeight:
+                                  FontWeight.w800,
+                              color:
+                                  AppColors.cyan,
+                            ),
+                          ),
+                        )
+                      : null,
                 ),
               ),
 

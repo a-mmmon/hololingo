@@ -201,6 +201,32 @@ class DailyBattleService {
     }
   }
 
+  /// Refunds a play claimed by [_claimPlayForToday] when the queue attempt
+  /// it was for never actually resulted in a real match — cancelled by the
+  /// user, or timed out with no opponent found. Without this, every
+  /// abandoned queue attempt (backgrounded app, no opponent, manual cancel)
+  /// would permanently cost one of today's 3 attempts for nothing.
+  static Future<void> refundPlayForToday() async {
+    final ref = _db
+        .collection('users')
+        .doc(_uid)
+        .collection('daily_challenge_history')
+        .doc(todayKey());
+
+    try {
+      await _db.runTransaction((transaction) async {
+        final snap = await transaction.get(ref);
+        final current = (snap.data()?['plays'] as num?)?.toInt() ?? 0;
+
+        if (current <= 0) return;
+
+        transaction.update(ref, {'plays': current - 1});
+      });
+    } catch (e) {
+      debugPrint('refundPlayForToday error: $e');
+    }
+  }
+
   // ============================================================
   // MATCHMAKING
   // ============================================================
@@ -240,8 +266,21 @@ class DailyBattleService {
         .limit(5)
         .get();
 
+    // A queue entry left behind by a client that backgrounded/crashed
+    // mid-queue (never hit Cancel, never hit the 3-minute timeout) stays
+    // 'waiting' forever and would otherwise match a future real player
+    // against a ghost opponent who never answers, hanging that battle.
+    // Anything older than the queue screen's own timeout is treated as
+    // abandoned and skipped rather than matched against.
+    final staleCutoff = DateTime.now().toUtc().subtract(
+          const Duration(minutes: 3),
+        );
+
     for (final doc in candidates.docs) {
       if (doc.id == _uid) continue;
+
+      final queuedAt = (doc.data()['queued_at'] as Timestamp?)?.toDate();
+      if (queuedAt == null || queuedAt.isBefore(staleCutoff)) continue;
 
       final battleId = await _matchWith(
         otherUid: doc.id,
@@ -505,10 +544,10 @@ class DailyBattleService {
         var newB = bTokens;
 
         if (result == 'player_a') {
-          newA = aTokens + wagerAmount;
+          newA = aTokens + (wagerAmount * 2);
           newB = (bTokens - wagerAmount) < tokenFloor ? tokenFloor : bTokens - wagerAmount;
         } else if (result == 'player_b') {
-          newB = bTokens + wagerAmount;
+          newB = bTokens + (wagerAmount * 2);
           newA = (aTokens - wagerAmount) < tokenFloor ? tokenFloor : aTokens - wagerAmount;
         }
 

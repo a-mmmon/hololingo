@@ -65,6 +65,7 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
       _timeoutTimer = Timer(const Duration(minutes: 3), () async {
         if (_matched || !mounted) return;
         await DailyBattleService.cancelQueue();
+        await DailyBattleService.refundPlayForToday();
         if (!mounted) return;
         setState(() {
           _error = 'No opponent found this time — try again later.';
@@ -98,6 +99,7 @@ class _DailyChallengeQueueScreenState extends State<DailyChallengeQueueScreen> {
   Future<void> _cancel() async {
     _timeoutTimer?.cancel();
     await DailyBattleService.cancelQueue();
+    await DailyBattleService.refundPlayForToday();
     if (mounted) Navigator.of(context).pop();
   }
 

@@ -144,113 +144,156 @@ class DetectorService {
 
   /// Minimum confidence required before the app accepts a detection.
   ///
-  /// Very low-confidence predictions (for example 5% or 15%) are not
-  /// reliable enough to be treated as real objects. Keeping this at 0.35
-  /// prevents weak predictions from being passed to the capture flow.
-  static const double _confidenceThreshold = 0.35;
+  /// The 135-class merged model (best.tflite, retrained by combining the
+  /// original 89 classes with 68 new ones) produces systematically lower
+  /// confidence scores than the old 89-class model even for clear, correctly
+  /// framed objects (e.g. a laptop scoring 0.12-0.15) — the same kind of
+  /// calibration shift that motivated lowering _targetConfidenceThreshold.
+  /// Lowered to match it; the live scanner's multi-frame voting (3 matching
+  /// detections required before a word is accepted) is what keeps this safe
+  /// against noise at a lower threshold, not the threshold alone.
+  static const double _confidenceThreshold = 0.08;
   static const double _targetConfidenceThreshold = 0.08;
 
-  /// Labels embedded in the bundled 89-class `best.tflite`, in class-index
-  /// order — must match training/data.yaml's `names:` list exactly (same
+  /// Labels embedded in the bundled 135-class `best.tflite`, in class-index
+  /// order — must match training/data64k.yaml's `names:` list exactly (same
   /// order), since this app does not read data.yaml at runtime.
-  ///
-  /// NOTE: the dataset has three case-duplicate classes (index pairs
-  /// 16/17 "key", 19/61 "mouse", 24/70 "rabbit") — the same real-world
-  /// object was labeled under two differently-cased class names during
-  /// dataset merging, so the model actually has two separate class slots
-  /// for each. That's a training-data issue, not something fixable here;
-  /// it'll just split confidence between the duplicate indices for those
-  /// three objects.
   static const List<String> _labels = [
-    'backpack',
-    'belt',
-    'camera',
-    'chair',
-    'clock',
-    'computer-monitor',
-    'desk',
-    'dog',
-    'door-handle',
-    'duck',
-    'elephant',
-    'fan',
-    'flower',
-    'fork',
-    'fountain',
-    'frog',
-    'key',
-    'key',
-    'laptop',
-    'mouse',
-    'mug',
-    'outlet',
-    'pen',
-    'projector',
-    'rabbit',
-    'ruler',
-    'shoes',
-    'skirt',
-    'spoon',
-    'stop-sign',
-    'traffic-sign',
-    'tripod',
-    'watch',
+    'airplane',
+    'airpod',
     'ambulance',
+    'apple',
+    'backpack',
     'bag',
+    'banana',
     'basket',
+    'bear',
+    'bed',
+    'belt',
     'bench',
     'bicycle',
     'bird',
+    'boat',
+    'bottle',
     'box',
+    'broccoli',
+    'bucket',
+    'bus',
     'cable',
     'cabinet',
+    'cake',
     'calculator',
+    'camera',
     'car',
+    'car key',
+    'carrot',
     'cat',
+    'chair',
+    'chess board',
     'chicken',
+    'clock',
+    'coca-cola',
+    'coconut',
     'coin',
+    'computer-monitor',
+    'couch',
+    'cow',
     'crosswalk',
+    'cup',
     'curtain',
+    'desk',
+    'dice',
+    'dog',
+    'donut',
     'door',
+    'door-handle',
+    'dress',
+    'duck',
+    'earbuds',
     'earphone',
-    'eyeglass',
+    'elephant',
+    'eyeglasses',
+    'fan',
+    'flower',
+    'football',
+    'fork',
+    'fountain',
+    'fries',
+    'frog',
+    'giraffe',
+    'glass',
+    'gloves',
+    'grasshopper',
+    'guitar',
     'hands',
     'hat',
+    'headphone',
+    'helmet',
+    'horse',
+    'hot dog',
     'jacket',
     'kettle',
+    'key',
     'keyboard',
+    'ladybugs',
     'lamp post',
+    'laptop',
+    'leaf',
+    'light',
     'mask',
     'microphone',
     'motorcycle',
     'mouse',
+    'mug',
     'notebook',
+    'orange',
+    'outlet',
     'paper',
     'paper cup',
+    'pen',
+    'pepsi',
     'person',
     'phone',
     'pillow',
+    'pizza',
     'plant',
     'potted plant',
+    'projector',
     'rabbit',
     'rat',
     'remote',
     'ring',
-    'rubiks_cube',
-    'scissor',
-    'shirt',
-    'shoe',
-    'sink',
+    'rubiks cube',
+    'ruler',
+    'sandwich',
+    'scarf',
+    'scissors',
+    'sheep',
+    'shoes',
+    'skateboard',
+    'skirt',
     'snack',
     'snake',
     'sofa',
+    'spoon',
     'stair',
     'stapler',
+    'stop-sign',
+    'student card',
     'table',
+    'tie',
+    'traffic-sign',
+    'train',
     'trash',
+    'tripod',
+    'truck',
     'umbrella',
+    'vase',
     'wallet',
-    'waterbottle',
+    'watch',
+    'water bottle',
+    'wheel chair',
+    'zebra',
   ];
 
   // ===========================================================================
@@ -1177,7 +1220,16 @@ class DetectorService {
 
     switch (target) {
       case 'laptop':
-        return model == 'laptop' || model == 'notebook';
+        // A MacBook is visually close enough to a monitor that the model
+        // sometimes classifies it as 'computer-monitor' instead of 'laptop'
+        // depending on angle/framing — accept either for this target.
+        return model == 'laptop' ||
+            model == 'notebook' ||
+            model == 'computer monitor';
+      case 'monitor':
+        return model == 'monitor' || model == 'computer monitor';
+      case 'dining table':
+        return model == 'table' || model == 'dining table';
       case 'cell phone':
       case 'phone':
         return model == 'phone' ||

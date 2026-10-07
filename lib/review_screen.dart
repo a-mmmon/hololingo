@@ -25,6 +25,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
     _savedWordsStream = DatabaseService.watchSavedWords(limit: null);
     _loadProfile();
     _repairBrokenDefinitionsOnce();
+    FirestoreService.migrateLegacyReviewStatus();
   }
 
   Future<void> _loadProfile() async {
@@ -93,10 +94,40 @@ class _ReviewScreenState extends State<ReviewScreen> {
     }
   }
 
+  // A word enters Needs Review once it's been missed twice, and *stays*
+  // flagged (review_status == 'needs_review') through its whole recovery
+  // climb back to 0 wrong, not just while wrong_count is literally >= 2 —
+  // see FirestoreService.recordQuizResult for the full lifecycle (needs
+  // review -> learned -> periodic recheck). Qualifying words are still
+  // sorted by how wrong-heavy they are, so the worst ones show first.
   List<Map<String, dynamic>> _needsReview(List<Map<String, dynamic>> savedWords) {
-    if (savedWords.isEmpty) return [];
-    final count = (savedWords.length * 0.2).ceil().clamp(1, savedWords.length);
-    return savedWords.take(count).toList();
+    final flagged = savedWords
+        .where((w) => (w['review_status'] ?? '') == 'needs_review')
+        .toList()
+      ..sort((a, b) {
+        final scoreA = (a['wrong_count'] ?? 0) - (a['correct_count'] ?? 0);
+        final scoreB = (b['wrong_count'] ?? 0) - (b['correct_count'] ?? 0);
+        return (scoreB as num).compareTo(scoreA as num);
+      });
+
+    return flagged;
+  }
+
+  // Needs Review words come first (shuffled among themselves), then
+  // everything else (also shuffled), so practice naturally front-loads the
+  // words the user actually struggles with instead of flipping through the
+  // full saved list in a fixed, unchanging order every time.
+  List<Map<String, dynamic>> _buildFlashcardDeck(
+    List<Map<String, dynamic>> savedWords,
+    List<Map<String, dynamic>> needsReview,
+  ) {
+    final needsReviewKeys = needsReview.map((w) => w['word']).toSet();
+    final rest = savedWords
+        .where((w) => !needsReviewKeys.contains(w['word']))
+        .toList()
+      ..shuffle();
+    final priority = [...needsReview]..shuffle();
+    return [...priority, ...rest];
   }
 
   @override
@@ -149,7 +180,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     dark: dark,
                     onTap: savedWords.isEmpty
                         ? null
-                        : () => _showFlashcards(savedWords),
+                        : () => _showFlashcards(
+                              _buildFlashcardDeck(savedWords, needsReview),
+                            ),
                   )),
                 ]),
                 if (needsReview.isNotEmpty) ...[

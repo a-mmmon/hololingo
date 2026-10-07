@@ -43,6 +43,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isPremium = false;
   DateTime? _premiumExpiresAt;
 
+  // Tokens change from outside this screen (Daily Challenge wins/losses),
+  // so unlike the rest of the profile fields below, this needs a live
+  // stream rather than the one-time _loadProfile() fetch, or it shows a
+  // stale pre-match balance until the screen is left and reopened.
+  Stream<Map<String, dynamic>>? _profileStream;
+
   // User-selectable learning and reminder settings.
   int _wordGoal = 10;
   TimeOfDay _dailyReminderTime = const TimeOfDay(hour: 20, minute: 0);
@@ -51,6 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _profileStream = FirestoreService.watchProfile();
     _loadProfile();
   }
 
@@ -950,10 +957,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Row(
                   children: [
-                    _StatItem(
-                      value: '$_tokens',
-                      label: 'Tokens',
-                      dark: dark,
+                    StreamBuilder<Map<String, dynamic>>(
+                      stream: _profileStream,
+                      builder: (context, snapshot) {
+                        final tokens =
+                            (snapshot.data?['tokens'] as num?)?.toInt() ??
+                                _tokens;
+                        return _StatItem(
+                          value: '$tokens',
+                          label: 'Tokens',
+                          dark: dark,
+                        );
+                      },
                     ),
                     _Divider(dark: dark),
                     _StatItem(

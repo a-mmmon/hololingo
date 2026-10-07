@@ -142,7 +142,54 @@ Platform targets present: iOS (primary, CocoaPods-managed under `ios/Pods`), And
 
 ---
 
-## 9. Known Rough Edges / Things to Check
+## 9. Data Accuracy
+
+Hololingo is a learning tool, so a wrong answer costs more than a missing one: if the app labels a mug as a "vase", the learner memorises the wrong word. The app therefore checks accuracy at three points: recognising the object, finding the word's meaning, and recording the learner's progress. In each case it would rather say "not sure" than show something wrong.
+
+### 9.1 Object recognition
+
+**Model and dataset.** Detection uses a custom YOLO model (`assets/Models/best.tflite`, 640×640 input) trained on 135 everyday-object classes from the team's Roboflow dataset (`hololingo-piu7w`, version 2, CC BY 4.0; config in `training/data64k.yaml`). Inference runs entirely on-device.
+
+> **Training metrics — to be filled in from the final training run:** mAP@50 = ___, mAP@50-95 = ___, precision = ___, recall = ___ (validation split). Also note any classes with clearly weaker results.
+
+**Confidence threshold.** A detection is accepted only if its confidence score reaches the minimum threshold (`DetectorService._confidenceThreshold`, currently **0.08**). The threshold looks low because the merged 135-class model gives lower scores overall than the earlier 89-class model, even for objects it identifies correctly (a clearly framed laptop scored about 0.12–0.15, for example). A higher threshold rejected too many correct detections. The threshold alone doesn't protect accuracy; the checks below do most of that work.
+
+**Agreement across frames (live scanner).** The live scanner never accepts a label from a single camera frame. A word is accepted only after the model returns the **same label in 3 frames** (`_requiredStableDetections = 3`). Usually, one blurry or badly angled frame can't produce a result on its own. A scan lasts up to 3 seconds. If no label reaches 3 frames by then, the scanner uses the label it saw most often (see 9.4). If it saw nothing, it asks the learner to aim again. Labels that aren't useful vocabulary targets (`person`, `human`, `background`, `unknown`) are ignored.
+
+**Target-checked capture (topic lessons).** In guided topic lessons, the learner is asked to find a specific object. The detector only accepts classes that match that target (with a few deliberate equivalents: a laptop seen from some angles is classified as `computer-monitor` or `notebook`). If nothing matching is found, the app retries the capture **once** to recover from a single bad frame, and then reports *"No object was detected clearly"*. It **never falls back to the target word** when nothing was detected. Doing so would mark an unrelated object as correct. The confidence score is shown to the learner on the result card.
+
+**Label integrity.** The app doesn't read the dataset's YAML at runtime; the class names are compiled into `DetectorService` in class-index order. At load time the app checks that the number of labels matches the number of classes the model outputs. If they differ (for example, the model was retrained but the label list wasn't updated), detection is **disabled** rather than allowed to show the wrong names. The app's label list also corrects spelling mistakes in the training data's class names (`Cabel` → *cable*, `Grasshoper` → *grasshopper*), so learners never see the misspellings.
+
+### 9.2 Word and definition accuracy
+
+Detector class names don't always match dictionary headwords. `DictionaryService.normalizeWord` maps the problem labels to real words (`computer-monitor` → *monitor*, `stop-sign` → *sign*, `potted plant` → *plant*, and so on). Each mapping was checked against the bundled dictionary files before it was added.
+
+Definitions are looked up in a fixed order of trust:
+
+1. **Curated entries.** Hand-written definitions, phonetics and example sentences for the app's core vocabulary.
+2. **Bundled offline dictionary.** Open Dictionary (Wiktionary-derived, about 260k words), under `assets/dictionary/`.
+3. **Online dictionary** (`dictionaryapi.dev`). Supplies phonetics, which the offline data never includes, and acts as a last resort for words missing offline. "Not found" answers are cached so the app doesn't keep asking.
+4. **Honest placeholder.** If all of these fail, the app says the definition isn't available yet. It does **not** generate or guess one.
+
+### 9.3 Learner progress and game data
+
+Progress data such as XP, review counts and challenge scores is stored in Cloud Firestore. It is written so that two updates at the same moment can't overwrite each other:
+
+- **Atomic counters.** XP, words saved, scan counts and times reviewed use `FieldValue.increment`, so updates from two devices at once are both counted.
+- **Transactions.** Spaced-review state (`correct_count`, `wrong_count`, `review_stage`) and Daily Challenge rounds are updated inside Firestore transactions. Each update reads and writes the data in a single step, so no change is lost.
+- **Server timestamps.** All times are set by the Firestore server (`FieldValue.serverTimestamp()`), not the phone's clock. This matters most for the Daily Challenge, where *the first correct answer wins* is decided by server timestamp. A player can't win by setting their phone clock back.
+- **Ownership rules.** `firestore.rules` only lets each user write their own data, so one user can't change another user's progress.
+
+### 9.4 Limitations
+
+- There is no automated test that measures real-world recognition accuracy. Accuracy has been checked by hand on real objects, and the confidence threshold was set by testing on devices.
+- The low threshold relies on the 3-frame check in the live scanner. That check doesn't apply when the 3-second scan ends without any label reaching 3 frames: the scanner then uses the most frequent label, which could have been seen in just one frame. Requiring at least 2 matching frames in that case would close this gap. Topic capture uses a single frame plus one retry, so a wrong label is more likely there. Restricting detection to the target class reduces this risk.
+- Accuracy varies between classes. Visually similar objects (laptop vs monitor, cup vs mug vs paper cup, sofa vs couch) are the most common mix-ups.
+- Online phonetics need a network connection. Offline, some words appear without pronunciation guides.
+
+---
+
+## 10. Known Rough Edges / Things to Check
 
 - `README.md` currently contains **unresolved git merge-conflict markers** (`<<<<<<< HEAD` / `=======` / `>>>>>>>`) — should be cleaned up.
 - The four flat `assets/mascot/*.png` mood images are now dead weight (superseded by `assets/mascot/parts/`) — safe to remove if no longer needed, or keep as a documented fallback.

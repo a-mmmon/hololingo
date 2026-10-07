@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'app_theme.dart';
 import 'firestore_service.dart';
@@ -130,6 +132,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
         name: friend['name'] ?? 'User',
         level: friend['level'] ?? 1,
         isBff: false,
+        photoBase64: friend['photo_base64']?.toString(),
       ),
     ));
 
@@ -265,6 +268,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                         return _UserTile(
                           name: u['name'] ?? 'User',
                           subtitle: u['city'],
+                          photoBase64: u['photo_base64']?.toString(),
                           dark: dark,
                           trailing: isFriend
                               ? _StatusPill(
@@ -355,6 +359,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       ..._friends.map((f) => _UserTile(
                             name: f['name'] ?? 'User',
                             subtitle: f['city'],
+                            photoBase64: f['photo_base64']?.toString(),
                             dark: dark,
                             onTap: () => _openFriendProfile(f),
                           )),
@@ -385,6 +390,7 @@ class _SectionLabel extends StatelessWidget {
 class _UserTile extends StatelessWidget {
   final String name;
   final String? subtitle;
+  final String? photoBase64;
   final bool dark;
   final Widget? trailing;
   final VoidCallback? onTap;
@@ -392,6 +398,7 @@ class _UserTile extends StatelessWidget {
   const _UserTile({
     required this.name,
     this.subtitle,
+    this.photoBase64,
     required this.dark,
     this.trailing,
     this.onTap,
@@ -399,6 +406,8 @@ class _UserTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = photoBase64 != null && photoBase64!.isNotEmpty;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -418,16 +427,24 @@ class _UserTile extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.cyan, width: 1.5),
                 color: AppColors.bg(dark),
+                image: hasPhoto
+                    ? DecorationImage(
+                        image: MemoryImage(base64Decode(photoBase64!)),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
               ),
-              child: Center(
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                  style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.cyan),
-                ),
-              ),
+              child: hasPhoto
+                  ? null
+                  : Center(
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.cyan),
+                      ),
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(

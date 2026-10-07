@@ -90,6 +90,144 @@ class FirestoreService {
     }
   }
 
+  /// How many months to wait before a learned word's next check, indexed by
+  /// review_stage (0 = time until the 1st check, 1 = until the 2nd, etc.).
+  /// Stages beyond the list repeat the last interval indefinitely.
+  static int _learnedCheckIntervalMonths(int stage) {
+    const intervals = [1, 3, 6];
+    if (stage < intervals.length) return intervals[stage];
+    return intervals.last;
+  }
+
+  /// Records one Quiz answer against the matching saved word and drives the
+  /// Needs Review -> Learned -> periodic recheck lifecycle:
+  ///
+  /// - A fresh word ('none') that's wrong twice becomes 'needs_review'.
+  /// - A 'needs_review' word's wrong_count drops by 1 per correct answer
+  ///   and rises by 1 per wrong answer. Once wrong_count is already 0, the
+  ///   *next* correct answer graduates it to 'learned' rather than just
+  ///   sitting at 0 — matching "one more correct after reaching 0".
+  /// - A 'learned' word is dormant until its next_check_at date. A correct
+  ///   check pushes the next check further out (1 -> 3 -> 6 months,
+  ///   repeating 6 after that); a wrong check sends it back to
+  ///   'needs_review' at the same wrong_count=2 entry threshold, i.e. the
+  ///   process starts over.
+  ///
+  /// Silently a no-op if the word isn't actually saved (e.g. Quiz filled a
+  /// gap with a dictionary word the user never saved).
+  static Future<void> recordQuizResult(
+    String word,
+    bool correct,
+  ) async {
+    final normalizedWord = word.trim().toLowerCase();
+    if (normalizedWord.isEmpty) return;
+
+    final wordRef = _db
+        .collection('users')
+        .doc(_uid)
+        .collection('saved_words')
+        .doc(normalizedWord);
+
+    try {
+      await _db.runTransaction((transaction) async {
+        final snap = await transaction.get(wordRef);
+        if (!snap.exists) return;
+
+        final data = snap.data() ?? {};
+        final wrongCount = (data['wrong_count'] as num?)?.toInt() ?? 0;
+        final correctCount = (data['correct_count'] as num?)?.toInt() ?? 0;
+        final status = (data['review_status'] as String?) ?? 'none';
+        final stage = (data['review_stage'] as num?)?.toInt() ?? 0;
+
+        final update = <String, dynamic>{};
+
+        if (status == 'learned') {
+          if (correct) {
+            final nextStage = stage + 1;
+            update['review_stage'] = nextStage;
+            update['next_check_at'] = Timestamp.fromDate(
+              DateTime.now().add(
+                Duration(days: _learnedCheckIntervalMonths(nextStage) * 30),
+              ),
+            );
+            update['correct_count'] = correctCount + 1;
+          } else {
+            update['review_status'] = 'needs_review';
+            update['wrong_count'] = 2;
+            update['review_stage'] = FieldValue.delete();
+            update['next_check_at'] = FieldValue.delete();
+          }
+        } else if (status == 'needs_review') {
+          if (correct) {
+            if (wrongCount <= 0) {
+              update['review_status'] = 'learned';
+              update['review_stage'] = 0;
+              update['next_check_at'] = Timestamp.fromDate(
+                DateTime.now().add(
+                  Duration(days: _learnedCheckIntervalMonths(0) * 30),
+                ),
+              );
+            } else {
+              update['wrong_count'] = wrongCount - 1;
+            }
+            update['correct_count'] = correctCount + 1;
+          } else {
+            update['wrong_count'] = wrongCount + 1;
+          }
+        } else {
+          // status == 'none': a fresh word, never flagged yet.
+          if (correct) {
+            update['correct_count'] = correctCount + 1;
+          } else {
+            final newWrong = wrongCount + 1;
+            update['wrong_count'] = newWrong;
+            if (newWrong >= 2) {
+              update['review_status'] = 'needs_review';
+            }
+          }
+        }
+
+        transaction.update(wordRef, update);
+      });
+    } catch (e) {
+      debugPrint('recordQuizResult error: $e');
+    }
+  }
+
+  /// One-time-per-word backfill for saved words created before the
+  /// Needs Review/Learned lifecycle existed. Idempotent: a word is only
+  /// ever touched once, since after this runs it always has review_status
+  /// set, so later calls skip it. Safe to call on every Review screen load.
+  static Future<void> migrateLegacyReviewStatus() async {
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(_uid)
+          .collection('saved_words')
+          .get();
+
+      final batch = _db.batch();
+      var hasUpdates = false;
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data.containsKey('review_status')) continue;
+
+        final wrongCount = (data['wrong_count'] as num?)?.toInt() ?? 0;
+        batch.update(doc.reference, {
+          'review_status': wrongCount >= 2 ? 'needs_review' : 'none',
+        });
+        hasUpdates = true;
+      }
+
+      if (hasUpdates) {
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('migrateLegacyReviewStatus error: $e');
+    }
+  }
+
   /// Downscales a local cutout and returns it as a base64 PNG string, or
   /// null if the file is missing, unreadable, or still too large to embed
   /// safely after resizing. Kept as PNG (not JPEG) so the cutout's

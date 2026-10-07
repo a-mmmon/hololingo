@@ -1,9 +1,11 @@
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 import 'firestore_service.dart';
+import 'thai_translations.dart';
 
 class QuizScreen extends StatefulWidget {
   const QuizScreen({super.key});
@@ -20,11 +22,18 @@ class _QuizQuestion {
   final String correctAnswer;
   final List<String> options;
 
+  /// Non-null only when this question came from a word the user actually
+  /// saved (as opposed to a dictionary word used to pad out a short quiz) —
+  /// that's the key recordQuizResult() needs to update the right saved
+  /// word's correct/wrong count.
+  final String? savedWordKey;
+
   const _QuizQuestion({
     required this.direction,
     required this.prompt,
     required this.correctAnswer,
     required this.options,
+    this.savedWordKey,
   });
 }
 
@@ -36,81 +45,6 @@ class _QuizScreenState extends State<QuizScreen> {
   String? _selected;
   bool _loading = true;
   bool _finished = false;
-
-  // Thai translations for words the app can detect/save. Only words in
-  // here are eligible for quiz questions.
-  static const Map<String, String> _thaiDictionary = {
-    'book': 'หนังสือ',
-    'bottle': 'ขวด',
-    'chair': 'เก้าอี้',
-    'laptop': 'แล็ปท็อป',
-    'cell phone': 'โทรศัพท์มือถือ',
-    'phone': 'โทรศัพท์',
-    'clock': 'นาฬิกา',
-    'remote': 'รีโมต',
-    'vase': 'แจกัน',
-    'scissors': 'กรรไกร',
-    'cup': 'ถ้วย',
-    'bed': 'เตียง',
-    'plant': 'ต้นไม้',
-    'flower': 'ดอกไม้',
-    'table': 'โต๊ะ',
-    'desk': 'โต๊ะทำงาน',
-    'pen': 'ปากกา',
-    'pencil': 'ดินสอ',
-    'suitcase': 'กระเป๋าเดินทาง',
-    'bag': 'กระเป๋า',
-    'backpack': 'กระเป๋าเป้',
-    'keyboard': 'แป้นพิมพ์',
-    'mouse': 'เมาส์',
-    'monitor': 'จอภาพ',
-    'lamp': 'โคมไฟ',
-    'shoe': 'รองเท้า',
-    'umbrella': 'ร่ม',
-    'bowl': 'ชาม',
-    'car': 'รถยนต์',
-    'dog': 'สุนัข',
-    'cat': 'แมว',
-    'bird': 'นก',
-    'horse': 'ม้า',
-    'sheep': 'แกะ',
-    'cow': 'วัว',
-    'elephant': 'ช้าง',
-    'bear': 'หมี',
-    'zebra': 'ม้าลาย',
-    'giraffe': 'ยีราฟ',
-    'couch': 'โซฟา',
-    'dining table': 'โต๊ะรับประทานอาหาร',
-    'bench': 'ม้านั่ง',
-    'apple': 'แอปเปิล',
-    'banana': 'กล้วย',
-    'orange': 'ส้ม',
-    'pizza': 'พิซซ่า',
-    'cake': 'เค้ก',
-    'sandwich': 'แซนด์วิช',
-    'hot dog': 'ฮอตดอก',
-    'broccoli': 'บรอกโคลี',
-    'carrot': 'แครอท',
-    'donut': 'โดนัท',
-    'bicycle': 'จักรยาน',
-    'motorcycle': 'รถจักรยานยนต์',
-    'airplane': 'เครื่องบิน',
-    'bus': 'รถบัส',
-    'train': 'รถไฟ',
-    'truck': 'รถบรรทุก',
-    'boat': 'เรือ',
-    'watch': 'นาฬิกาข้อมือ',
-    'jacket': 'แจ็คเก็ต',
-    'sunglasses': 'แว่นกันแดด',
-    'tissue': 'ทิชชู่',
-    'toothbrush': 'แปรงสีฟัน',
-    'laptop charger': 'ที่ชาร์จแล็ปท็อป',
-    'charger': 'ที่ชาร์จ',
-    'usb': 'ยูเอสบี',
-    'sensor': 'เซนเซอร์',
-    'camera': 'กล้อง',
-    'calculator': 'เครื่องคิดเลข',
-  };
 
   @override
   void initState() {
@@ -129,37 +63,57 @@ class _QuizScreenState extends State<QuizScreen> {
           .where((e) => (e['word'] ?? '').toString().trim().isNotEmpty)
           .toList();
 
-      // Saved words that have a known Thai translation.
-      final translatableKeys = saved
+      // A 'learned' word is dormant until its scheduled recheck date, so it
+      // doesn't get quizzed prematurely — see
+      // FirestoreService.recordQuizResult for the full lifecycle. Fresh
+      // ('none') and 'needs_review' words are always eligible.
+      final now = DateTime.now();
+      final eligible = saved.where((e) {
+        final status = (e['review_status'] as String?) ?? 'none';
+        if (status != 'learned') return true;
+        final nextCheck = (e['next_check_at'] as Timestamp?)?.toDate();
+        return nextCheck != null && !nextCheck.isAfter(now);
+      }).toList();
+
+      // Saved words that have a known Thai translation. Questions are only
+      // ever built from these, never from words the user hasn't saved, so
+      // the quiz always reflects the user's own vocabulary rather than
+      // random dictionary entries.
+      final translatableKeys = eligible
           .map((e) => e['word'].toString().trim().toLowerCase())
-          .where((key) => _thaiDictionary.containsKey(key))
+          .where((key) => kThaiTranslations.containsKey(key))
           .toSet();
 
-      // Pad with dictionary words the user hasn't saved yet, so there's
-      // still a full quiz even with few saved+translated words.
-      final fillerKeys = _thaiDictionary.keys
-          .where((k) => !translatableKeys.contains(k))
-          .toList()
-        ..shuffle(_random);
-
-      final pool = [...translatableKeys, ...fillerKeys];
-      pool.shuffle(_random);
-
+      final pool = translatableKeys.toList()..shuffle(_random);
       final count = min(5, pool.length);
       final questions = <_QuizQuestion>[];
 
       for (int i = 0; i < count; i++) {
         final key = pool[i];
-        final thai = _thaiDictionary[key]!;
+        final thai = kThaiTranslations[key]!;
         final englishWord = _capitalize(key);
 
         final direction = _random.nextBool()
             ? _QuizDirection.engToThai
             : _QuizDirection.thaiToEng;
 
-        final otherKeys =
-            _thaiDictionary.keys.where((k) => k != key).toList()
+        // Prefer distractors from the user's other saved words first, and
+        // only borrow from the wider dictionary if there aren't enough
+        // saved words to fill out the answer choices.
+        final otherSavedKeys =
+            translatableKeys.where((k) => k != key).toList()..shuffle(_random);
+        final otherDictionaryKeys =
+            kThaiTranslations.keys
+                .where((k) => k != key && !translatableKeys.contains(k))
+                .toList()
               ..shuffle(_random);
+        // Skip synonyms that share this word's Thai (e.g. couch/sofa), and
+        // keep each Thai choice unique, so no question shows two identical
+        // answers.
+        final seenThai = {thai};
+        final otherKeys = [...otherSavedKeys, ...otherDictionaryKeys]
+            .where((k) => seenThai.add(kThaiTranslations[k]!))
+            .toList();
 
         late final String prompt;
         late final String correctAnswer;
@@ -170,7 +124,7 @@ class _QuizScreenState extends State<QuizScreen> {
           correctAnswer = thai;
           options = [
             thai,
-            ...otherKeys.take(3).map((k) => _thaiDictionary[k]!),
+            ...otherKeys.take(3).map((k) => kThaiTranslations[k]!),
           ];
         } else {
           prompt = thai;
@@ -188,6 +142,7 @@ class _QuizScreenState extends State<QuizScreen> {
           prompt: prompt,
           correctAnswer: correctAnswer,
           options: options,
+          savedWordKey: key,
         ));
       }
 
@@ -206,11 +161,18 @@ class _QuizScreenState extends State<QuizScreen> {
   void _answer(String option) {
     if (_selected != null || _finished || _questions.isEmpty) return;
 
-    final correct = _questions[_index].correctAnswer;
+    final question = _questions[_index];
+    final isCorrect = option == question.correctAnswer;
+
     setState(() {
       _selected = option;
-      if (option == correct) _score++;
+      if (isCorrect) _score++;
     });
+
+    final wordKey = question.savedWordKey;
+    if (wordKey != null) {
+      FirestoreService.recordQuizResult(wordKey, isCorrect);
+    }
   }
 
   void _next() {

@@ -118,13 +118,6 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
   Future<void> _tapWord(TopicWord word) async {
     final wasAlreadyLearned = _learned.contains(word.word);
-    final existingImagePath = _imagePaths[word.word.toLowerCase()];
-    final hasExistingImage =
-        existingImagePath != null && File(existingImagePath).existsSync();
-
-    if (wasAlreadyLearned && hasExistingImage) {
-      return;
-    }
 
     // ==========================================================
     // OPEN CAMERA CAPTURE SCREEN
@@ -152,6 +145,20 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
     if (!mounted) return;
 
+    // A capture whose image couldn't be saved must not be marked learned —
+    // otherwise the tile ends up green/checked with no cutout to show,
+    // which looks broken even though progress was technically recorded.
+    if (imagePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save the photo. Please try capturing again.',
+          ),
+        ),
+      );
+      return;
+    }
+
     // Topic capture is its own feature, separate from the AR scan flow —
     // success is shown by the word tile itself (green border + cutout
     // image once learned), not by opening the AR camera screen.
@@ -163,7 +170,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
     try {
       await FirestoreService.saveWord({
         'word': word.word,
-        'image_path': imagePath ?? '',
+        'image_path': imagePath,
         'definition': result.definition ?? '',
       });
 
@@ -193,9 +200,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
     setState(() {
       _learned.add(word.word);
-      if (imagePath != null) {
-        _imagePaths[word.word.toLowerCase()] = imagePath;
-      }
+      _imagePaths[word.word.toLowerCase()] = imagePath;
       _changed = true;
     });
 

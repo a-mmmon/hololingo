@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'app_theme.dart';
+import 'thai_translations.dart';
 
 class FlashcardScreen extends StatefulWidget {
   final List<Map<String, dynamic>> words;
@@ -174,7 +175,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     final phonetic = word['phonetic'] ?? '';
     final definition = word['definition'] ?? '';
     final example = word['example'] ?? '';
-    final thaiTranslation = _thaiMap[wordName.toLowerCase()] ?? '';
+    final thaiTranslation = _thaiMap[wordName.toLowerCase()] ??
+        kThaiTranslations[wordName.toLowerCase()] ??
+        '';
 
     return Scaffold(
       backgroundColor: AppColors.bg(dark),
