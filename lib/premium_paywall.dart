@@ -138,7 +138,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Unlock every topic and remove ads.',
+              'Unlock every topic, chat with Gobot without limits, and remove ads.',
               style: TextStyle(
                 color: AppColors.textSecondary(dark),
                 fontSize: 14,
@@ -146,7 +146,7 @@ class _PremiumPaywallSheetState extends State<_PremiumPaywallSheet> {
               ),
             ),
             const SizedBox(height: 18),
-            ...['Unlocked topics', 'Remove ads'].map(
+            ...['Unlocked topics', 'Unlimited Gobot messages', 'Remove ads'].map(
               (text) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(

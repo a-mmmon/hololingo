@@ -384,34 +384,67 @@ class _TopicsScreenState extends State<TopicsScreen> {
     return _learnedCount(topic) >= topic.words.length;
   }
 
+  // The topics a user works through, in map order. Free users skip
+  // premium topics; subscribers go through every topic.
+  List<TopicDef> get _path {
+    return _topics
+        .where((item) => !item.isPremium || _isPremiumUser)
+        .toList();
+  }
+
+  // The next topic to work on: the first unfinished one in the path.
   TopicDef get _activeTopic {
-    return _topics.firstWhere(
+    final path = _path;
+    if (path.isEmpty) return _topics.last;
+    return path.firstWhere(
       (t) => !_isComplete(t),
-      orElse: () => _topics.last,
+      orElse: () => path.last,
     );
+  }
+
+  // The topic that unlocks after [topic] in the path, if any.
+  TopicDef? _nextTopicAfter(
+    TopicDef topic,
+  ) {
+    final path = _path;
+    final index = path.indexOf(topic);
+    if (index < 0 || index + 1 >= path.length) return null;
+    return path[index + 1];
+  }
+
+  // A premium topic the user can't open yet because they aren't
+  // subscribed (shown with the star and "Subscribe to unlock" text).
+  bool _needsPremium(
+    TopicDef topic,
+  ) {
+    return topic.isPremium && !_isPremiumUser;
   }
 
   bool _isLocked(
     TopicDef topic,
   ) {
-    if (topic.isPremium) {
-      return !_isPremiumUser;
+    if (_needsPremium(topic)) {
+      return true;
     }
 
-    final regularTopics = _topics.where((item) => !item.isPremium).toList();
-    final index = regularTopics.indexOf(topic);
+    // Topics unlock in map order: each one opens only after the previous
+    // topic is complete. Subscribers follow the same order through premium
+    // topics too, so subscribing removes the premium lock but doesn't let
+    // them skip ahead of unfinished topics. Free users skip premium topics.
+    final path = _path;
+    final index = path.indexOf(topic);
     if (index <= 0) {
       return false;
     }
 
-    return !_isComplete(regularTopics[index - 1]);
+    return !_isComplete(path[index - 1]);
   }
 
   Future<void> _openTopic(
     TopicDef topic,
   ) async {
     if (_isLocked(topic)) {
-      if (topic.isPremium) {
+      if (_needsPremium(topic)) {
         await showPremiumPaywall(context);
         await _loadAll();
 
@@ -423,16 +456,26 @@ class _TopicsScreenState extends State<TopicsScreen> {
       }
     }
 
-    final result = await Navigator.push<bool>(
+    final next = _nextTopicAfter(topic);
+
+    final result = await Navigator.push<Object?>(
       context,
       MaterialPageRoute(
         builder: (_) => TopicWordGridScreen(
           topic: topic,
+          nextTopicName: next?.name,
         ),
       ),
     );
 
-    if (result == true) {
+    if (result == 'next') {
+      // The learner tapped "Next topic" on the completion screen: refresh
+      // progress (so the next topic counts as unlocked), then open it.
+      await _loadAll();
+      if (mounted && next != null) {
+        await _openTopic(next);
+      }
+    } else if (result == true) {
       _loadAll();
     }
   }
@@ -588,6 +631,7 @@ class _TopicsScreenState extends State<TopicsScreen> {
                         learnedCount: _learnedCount,
                         isComplete: _isComplete,
                         isLocked: _isLocked,
+                        needsPremium: _needsPremium,
                         onTapTopic: _openTopic,
                         dark: dark,
                       ),
@@ -862,6 +906,8 @@ class _TopicMap extends StatelessWidget {
 
   final bool Function(TopicDef) isLocked;
 
+  final bool Function(TopicDef) needsPremium;
+
   final void Function(TopicDef) onTapTopic;
 
   final bool dark;
@@ -874,6 +920,7 @@ class _TopicMap extends StatelessWidget {
     required this.learnedCount,
     required this.isComplete,
     required this.isLocked,
+    required this.needsPremium,
     required this.onTapTopic,
     required this.dark,
   });
@@ -963,6 +1010,8 @@ class _TopicMap extends StatelessWidget {
 
     final locked = isLocked(topic);
 
+    final premiumLocked = needsPremium(topic);
+
     final isActive = topic.id == activeTopic.id;
 
     return Positioned(
@@ -1024,12 +1073,12 @@ class _TopicMap extends StatelessWidget {
                     ],
                   ),
                   child: Icon(
-                    locked && topic.isPremium
+                    premiumLocked
                         ? Icons.star_rounded
                         : locked
                             ? Icons.lock_rounded
                             : topic.icon,
-                    color: locked && topic.isPremium
+                    color: premiumLocked
                         ? const Color(0xFFFFB300)
                         : locked
                             ? AppColors.textTertiary(
@@ -1063,7 +1112,7 @@ class _TopicMap extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (locked && topic.isPremium)
+                if (premiumLocked)
                   Positioned(
                     right: -5,
                     top: -5,
@@ -1117,7 +1166,7 @@ class _TopicMap extends StatelessWidget {
                             ),
                     ),
                   ),
-                  if (locked && topic.isPremium)
+                  if (premiumLocked)
                     const Text(
                       'Subscribe to unlock this topic',
                       style: TextStyle(

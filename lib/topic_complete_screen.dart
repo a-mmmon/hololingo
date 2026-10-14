@@ -7,12 +7,17 @@ class TopicCompleteScreen extends StatelessWidget {
   final int tokensEarned;
   final int xpEarned;
 
+  // The topic that unlocks next, if any. When set, the main button goes
+  // straight to it (pops true); "Back to Topics" pops false.
+  final String? nextTopicName;
+
   const TopicCompleteScreen({
     super.key,
     required this.topicName,
     required this.wordsLearned,
     required this.tokensEarned,
     required this.xpEarned,
+    this.nextTopicName,
   });
 
   @override
@@ -60,7 +65,7 @@ class TopicCompleteScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(context, nextTopicName != null),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.cyan,
                     foregroundColor: Colors.black,
@@ -69,13 +74,24 @@ class TopicCompleteScreen extends StatelessWidget {
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Text('Back to Topics',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    children: [
+                      Text(
+                          nextTopicName != null
+                              ? 'Next topic: $nextTopicName'
+                              : 'Back to Topics',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
               ),
+              if (nextTopicName != null)
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(
+                    'Back to Topics',
+                    style: TextStyle(color: AppColors.textSecondary(dark)),
+                  ),
+                ),
               const SizedBox(height: 24),
             ],
           ),

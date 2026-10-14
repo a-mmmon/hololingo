@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_theme.dart';
 
@@ -47,11 +48,35 @@ class _FakeCheckoutScreenState extends State<FakeCheckoutScreen> {
     super.dispose();
   }
 
+  // Checked only so the demo form behaves like a real one; nothing here is
+  // sent anywhere (see the note at the top of this file).
+  bool get _cardValid =>
+      _cardController.text.replaceAll(' ', '').length == 16;
+
+  bool get _expiryValid {
+    final match = RegExp(r'^(\d{2})/(\d{2})$').firstMatch(_expiryController.text);
+    if (match == null) return false;
+    final month = int.parse(match.group(1)!);
+    final year = 2000 + int.parse(match.group(2)!);
+    if (month < 1 || month > 12) return false;
+    final now = DateTime.now();
+    // A card is valid until the end of its expiry month.
+    return year > now.year || (year == now.year && month >= now.month);
+  }
+
+  bool get _cvvValid => _cvvController.text.length == 3;
+
   bool get _formFilled =>
-      _cardController.text.trim().isNotEmpty &&
-      _expiryController.text.trim().isNotEmpty &&
-      _cvvController.text.trim().isNotEmpty &&
+      _cardValid &&
+      _expiryValid &&
+      _cvvValid &&
       _nameController.text.trim().isNotEmpty;
+
+  // Shown once the expiry is fully typed but isn't a real, future date.
+  String? get _expiryError =>
+      _expiryController.text.length == 5 && !_expiryValid
+          ? 'Enter a valid date'
+          : null;
 
   Future<void> _pay() async {
     if (_processing || !_formFilled) return;
@@ -143,12 +168,30 @@ class _FakeCheckoutScreenState extends State<FakeCheckoutScreen> {
                 label: 'Card number',
                 hint: '4242 4242 4242 4242',
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(16),
+                  _CardNumberFormatter(),
+                ],
               ),
               const SizedBox(height: 12),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: _field(dark, controller: _expiryController, label: 'Expiry', hint: 'MM/YY'),
+                    child: _field(
+                      dark,
+                      controller: _expiryController,
+                      label: 'Expiry',
+                      hint: 'MM/YY',
+                      keyboardType: TextInputType.number,
+                      errorText: _expiryError,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                        _ExpiryDateFormatter(),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -158,6 +201,11 @@ class _FakeCheckoutScreenState extends State<FakeCheckoutScreen> {
                       label: 'CVV',
                       hint: '123',
                       keyboardType: TextInputType.number,
+                      obscureText: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(3),
+                      ],
                     ),
                   ),
                 ],
@@ -208,6 +256,9 @@ class _FakeCheckoutScreenState extends State<FakeCheckoutScreen> {
     required String label,
     required String hint,
     TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? errorText,
+    bool obscureText = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,10 +268,13 @@ class _FakeCheckoutScreenState extends State<FakeCheckoutScreen> {
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
+          obscureText: obscureText,
           onChanged: (_) => setState(() {}),
           style: TextStyle(color: AppColors.textPrimary(dark)),
           decoration: InputDecoration(
             hintText: hint,
+            errorText: errorText,
             hintStyle: TextStyle(color: AppColors.textSecondary(dark).withValues(alpha: 0.6)),
             filled: true,
             fillColor: AppColors.card(dark),
@@ -240,6 +294,47 @@ class _FakeCheckoutScreenState extends State<FakeCheckoutScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Groups the card number in blocks of four: "4242424242424242" becomes
+/// "4242 4242 4242 4242". Runs after digitsOnly, so it only sees digits.
+class _CardNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text;
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && i % 4 == 0) buffer.write(' ');
+      buffer.write(digits[i]);
+    }
+    final text = buffer.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
+/// Turns typed digits into MM/YY, adding the slash after the month:
+/// "1" → "1", "12" → "12", "128" → "12/8", "1228" → "12/28".
+class _ExpiryDateFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text;
+    final text = digits.length > 2
+        ? '${digits.substring(0, 2)}/${digits.substring(2)}'
+        : digits;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }

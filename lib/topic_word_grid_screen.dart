@@ -14,9 +14,14 @@ import 'topic_capture_screen.dart';
 class TopicWordGridScreen extends StatefulWidget {
   final TopicDef topic;
 
+  // Name of the topic that unlocks after this one, shown on the
+  // completion screen. Null when this is the last topic.
+  final String? nextTopicName;
+
   const TopicWordGridScreen({
     super.key,
     required this.topic,
+    this.nextTopicName,
   });
 
   @override
@@ -290,7 +295,7 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
 
     if (!mounted) return;
 
-    await Navigator.push(
+    final goNext = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => TopicCompleteScreen(
@@ -298,14 +303,17 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
           wordsLearned: widget.topic.words.length,
           tokensEarned: tokens,
           xpEarned: xp,
+          nextTopicName: widget.nextTopicName,
         ),
       ),
     );
 
+    // 'next' tells the Topics screen to open the following topic right
+    // away; true just asks it to refresh the map.
     if (mounted) {
       Navigator.pop(
         context,
-        true,
+        goNext == true ? 'next' : true,
       );
     }
   }
