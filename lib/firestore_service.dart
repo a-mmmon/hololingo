@@ -51,6 +51,23 @@ class FirestoreService {
       'updated_at': FieldValue.serverTimestamp(),
     };
 
+    // The same word can be saved again from Scan, Topics or the word
+    // detail screen, each sending a different subset of fields. Skip empty
+    // values so a later save never wipes a phonetic, definition or picture
+    // an earlier save stored (merge keeps any field that isn't sent).
+    const keepIfEmpty = [
+      'phonetic',
+      'partOfSpeech',
+      'definition',
+      'example',
+      'image_path',
+      'image_url',
+      'image_base64',
+    ];
+    for (final key in keepIfEmpty) {
+      if ((data[key] ?? '').toString().trim().isEmpty) data.remove(key);
+    }
+
     // image_path is a local file path inside this app install's sandboxed
     // container, which iOS invalidates on every reinstall — so it can't be
     // relied on to persist. Embed a downscaled copy directly in the

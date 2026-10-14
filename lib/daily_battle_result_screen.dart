@@ -85,7 +85,9 @@ class DailyBattleResultScreen extends StatelessWidget {
                         const SizedBox(height: 14),
                         if (!isDraw)
                           Text(
-                            won ? '+$wager tokens' : '-$wager tokens',
+                            // The winner gets their own wager back plus the
+                            // opponent's (see DailyBattleService._settleTokens).
+                            won ? '+${wager * 2} tokens' : '-$wager tokens',
                             style: TextStyle(
                               color: color,
                               fontSize: 18,

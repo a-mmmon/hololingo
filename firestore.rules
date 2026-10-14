@@ -83,7 +83,7 @@ service cloud.firestore {
       let proposedTokens = request.resource.data.tokens;
       let expectedTokens =
         battle.result == 'draw' ? oldTokens :
-        isWinner ? oldTokens + battle.wager :
+        isWinner ? oldTokens + battle.wager * 2 :
         isLoser ? (oldTokens - battle.wager > battle.token_floor ? oldTokens - battle.wager : battle.token_floor) :
         oldTokens;
       return battle.status == 'resolved'

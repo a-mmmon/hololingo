@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'app_theme.dart';
+import 'thai_translations.dart';
 import 'firestore_service.dart';
 import 'dictionary_service.dart';
 import 'vocab_detail_screen.dart';
@@ -376,17 +378,90 @@ class _FlashcardSheet extends StatefulWidget {
 class _FlashcardSheetState extends State<_FlashcardSheet> {
   int _index = 0;
   bool _flipped = false;
+  final FlutterTts _tts = FlutterTts();
+
+  // Dictionary details for words saved without them (older Topic saves
+  // stored only the word, picture and definition), keyed by word.
+  final Map<String, Map<String, String>> _lookups = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+    _fillMissing(_index);
+  }
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _tts.setSharedInstance(true);
+      await _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+        ],
+        IosTextToSpeechAudioMode.voicePrompt,
+      );
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.5);
+    } catch (e) {
+      debugPrint('Flashcard TTS init error: $e');
+    }
+  }
+
+  Future<void> _speak(String word) async {
+    if (word.isEmpty) return;
+    try {
+      await _tts.stop();
+      await _tts.speak(word);
+    } catch (e) {
+      debugPrint('Flashcard TTS error: $e');
+    }
+  }
+
+  Future<void> _fillMissing(int i) async {
+    final word = widget.words[i];
+    final key = (word['word'] ?? '').toString().trim().toLowerCase();
+    if (key.isEmpty || _lookups.containsKey(key)) return;
+    final complete = ['phonetic', 'definition', 'example']
+        .every((f) => (word[f] ?? '').toString().isNotEmpty);
+    if (complete) return;
+    try {
+      final info = await DictionaryService.getWordInfo(key);
+      if (mounted) setState(() => _lookups[key] = info);
+    } catch (e) {
+      debugPrint('Flashcard lookup error: $e');
+    }
+  }
+
+  // The saved value when there is one, else the dictionary's.
+  String _field(Map<String, dynamic> word, String name) {
+    final saved = (word[name] ?? '').toString();
+    if (saved.isNotEmpty) return saved;
+    final key = (word['word'] ?? '').toString().trim().toLowerCase();
+    return _lookups[key]?[name] ?? '';
+  }
 
   void _next() {
     if (_index < widget.words.length - 1) {
       setState(() { _index++; _flipped = false; });
+      _fillMissing(_index);
     } else {
       Navigator.pop(context);
     }
   }
 
   void _prev() {
-    if (_index > 0) setState(() { _index--; _flipped = false; });
+    if (_index > 0) {
+      setState(() { _index--; _flipped = false; });
+      _fillMissing(_index);
+    }
   }
 
   @override
@@ -394,6 +469,11 @@ class _FlashcardSheetState extends State<_FlashcardSheet> {
     final dark = widget.dark;
     final word = widget.words[_index];
     final total = widget.words.length;
+    final wordText = (word['word'] ?? '').toString();
+    final phonetic = _field(word, 'phonetic');
+    final definition = _field(word, 'definition');
+    final example = _field(word, 'example');
+    final thai = kThaiTranslations[wordText.trim().toLowerCase()] ?? '';
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
@@ -427,28 +507,42 @@ class _FlashcardSheetState extends State<_FlashcardSheet> {
                   ),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     if (!_flipped) ...[
-                      Text(word['word'] ?? '', style: TextStyle(
+                      Text(wordText, style: TextStyle(
                         fontSize: 42, fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary(dark), letterSpacing: -1),
                         textAlign: TextAlign.center),
                       const SizedBox(height: 8),
-                      if ((word['phonetic'] ?? '').isNotEmpty)
-                        Text(word['phonetic'], style: const TextStyle(
+                      if (phonetic.isNotEmpty)
+                        Text(phonetic, style: const TextStyle(
                           color: AppColors.cyan, fontSize: 16, fontStyle: FontStyle.italic)),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
+                      IconButton(
+                        onPressed: () => _speak(wordText),
+                        icon: const Icon(Icons.volume_up_rounded),
+                        color: AppColors.cyan,
+                        iconSize: 30,
+                        tooltip: 'Listen',
+                      ),
+                      const SizedBox(height: 12),
                       Text('Tap to reveal',
                         style: TextStyle(color: AppColors.textTertiary(dark), fontSize: 13)),
                     ] else ...[
+                      if (thai.isNotEmpty) ...[
+                        Text(thai, style: const TextStyle(
+                          color: AppColors.cyan, fontSize: 22, fontWeight: FontWeight.w700),
+                          textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                      ],
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: Text(word['definition'] ?? '', style: TextStyle(
+                        child: Text(definition, style: TextStyle(
                           color: AppColors.textPrimary(dark), fontSize: 18, height: 1.5),
                           textAlign: TextAlign.center)),
-                      if ((word['example'] ?? '').isNotEmpty) ...[
+                      if (example.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 28),
-                          child: Text('"${word['example']}"', style: TextStyle(
+                          child: Text('"$example"', style: TextStyle(
                             color: AppColors.textSecondary(dark), fontSize: 14,
                             fontStyle: FontStyle.italic, height: 1.5),
                             textAlign: TextAlign.center)),

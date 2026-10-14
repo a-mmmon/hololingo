@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_theme.dart';
+import 'dictionary_service.dart';
 import 'firestore_service.dart';
 import 'topics_data.dart';
 import 'topic_complete_screen.dart';
@@ -168,10 +169,29 @@ class _TopicWordGridScreenState extends State<TopicWordGridScreen> {
     // ==========================================================
 
     try {
+      // Save the same details a Scan save stores, so topic words show
+      // their phonetic, example and pronunciation in Review flashcards.
+      // The capture screen normally looked them up already; fall back to
+      // the dictionary if the learner confirmed before that finished.
+      var phonetic = result.phonetic ?? '';
+      var definition = result.definition ?? '';
+      var example = result.example ?? '';
+      var partOfSpeech = result.partOfSpeech ?? '';
+      if (phonetic.isEmpty || definition.isEmpty || example.isEmpty) {
+        final info = await DictionaryService.getWordInfo(word.word);
+        if (phonetic.isEmpty) phonetic = info['phonetic'] ?? '';
+        if (definition.isEmpty) definition = info['definition'] ?? '';
+        if (example.isEmpty) example = info['example'] ?? '';
+        if (partOfSpeech.isEmpty) partOfSpeech = info['partOfSpeech'] ?? '';
+      }
+
       await FirestoreService.saveWord({
         'word': word.word,
         'image_path': imagePath,
-        'definition': result.definition ?? '',
+        'phonetic': phonetic,
+        'partOfSpeech': partOfSpeech,
+        'definition': definition,
+        'example': example,
       });
 
       await FirestoreService.markWordLearned(
